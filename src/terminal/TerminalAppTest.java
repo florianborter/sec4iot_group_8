@@ -19,6 +19,17 @@ public class TerminalAppTest {
 
             // Send data "1234" to the applet
             sendDataToApplet(channel, "1234");
+            sendDataToApplet(channel, "2345");
+
+            /*
+            Expected output in terminal:
+            Select Applet Response: 9000
+            Get Data Response: 429000
+            Send Data Response: 9000
+            SW: 9000
+            Send Data Response: 6A80
+            SW: 6A80
+             */
 
             // Disconnect the card
             card.disconnect(false);
