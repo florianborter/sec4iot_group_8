@@ -1,7 +1,6 @@
 package terminal;
 
 import javax.smartcardio.*;
-import java.util.Arrays;
 import java.util.List;
 import java.util.Scanner;
 
@@ -40,38 +39,13 @@ public class TerminalApp {
             selectApplet(channel, aid);
 
             // Ask the user for the pin
-            /*System.out.println("Please enter the pin!");
+            System.out.println("Please enter the card pin!");
             Scanner in = new Scanner(System.in);
             String pinString = in.nextLine();
-            System.out.println("You entered Pin " + pinString);*/
+            System.out.println("You entered Pin " + pinString);
 
-            /*// Send the PIN verification command to the card
-            byte[] pin = pinString.getBytes();
-            byte[] commandData = new byte[pin.length + 1];  // First byte is the PIN length
-            commandData[0] = (byte) pin.length;
-            System.arraycopy(pin, 0, commandData, 1, pin.length);
-
-            CommandAPDU command = new CommandAPDU((byte) 0x00, VERIFY_PIN, (short) 0x00, (short) 0x00, commandData);
-
-            // Send the APDU command and receive the response
-            ResponseAPDU response = channel.transmit(command);*/
-
-            // Create a basic APDU command with just the INS byte(0x20)
-            /*byte[] apduCommand = new byte[]{(byte) 0x00, // CLA
-                    VERIFY_PIN, // INS
-                    (byte) 0x00, // P1
-                    (byte) 0x00, // P2
-                    (byte) 0x00 // Lc (no data)
-            };
-            CommandAPDU command = new CommandAPDU(apduCommand); // Send the APDU command and receive the response
-            ResponseAPDU response = channel.transmit(command);
-
-            // Check the response status word
-            if (response.getSW() == 0x9000) {  // 0x9000 is the success status word
-                System.out.println("PIN verification successful.");
-            } else {
-                System.out.println("PIN verification failed. SW: " + Integer.toHexString(response.getSW()));
-            }*/
+            // Send the PIN verification command to the card
+            verifyPin(channel, pinString);
 
             // Disconnect the card
             card.disconnect(false);
@@ -90,20 +64,33 @@ public class TerminalApp {
                 0x00, // P2 (P2: This byte specifies further details about the selection... 0x00: Indicates that the first or only occurrence of the specified AID should be selected.)
                 aid // AID (payload)
         );
-        ResponseAPDU selectResponse = channel.transmit(selectAPDU);
-        if (selectResponse.getSW() == 0x9000) {
-            System.out.println("Selected applet successfully. Response: " + byteArrayToHex(selectResponse.getBytes()));
+        ResponseAPDU response = channel.transmit(selectAPDU);
+        if (response.getSW() == 0x9000) {
+            System.out.println("Selected applet successfully. SW: " + Integer.toHexString(response.getSW()));
         } else {
-            System.out.println("Selecting applet failed. Response: " + byteArrayToHex(selectResponse.getBytes()));
+            System.out.println("Selecting applet failed. SW: " + Integer.toHexString(response.getSW()));
+            System.exit(0);
         }
     }
 
-    // Utility method to convert byte array to hexadecimal string
-    private static String byteArrayToHex(byte[] bytes) {
-        StringBuilder hexString = new StringBuilder();
-        for (byte b : bytes) {
-            hexString.append(String.format("%02X", b));
+    private static void verifyPin(CardChannel channel, String data) throws CardException {
+        // Convert the data string to byte array
+        byte[] dataBytes = data.getBytes(); // Command to send the data to the applet
+        CommandAPDU sendDataAPDU = new CommandAPDU(0x00, // CLA
+                0x20, // INS (Check Data instruction)
+                0x00, // P1 -> 0x00 Placeholder
+                0x00, // P2 -> 0x00 Placeholder
+                dataBytes, // Data for command
+                0x00, // offset in the data
+                dataBytes.length, // LC (length of data)
+                0x04); // NE resp. LE (max length of returning data)
+        ResponseAPDU response = channel.transmit(sendDataAPDU);
+
+        // Check the response status word
+        if (response.getSW() == 0x9000) {  // 0x9000 is the success status word
+            System.out.println("PIN verification successful.");
+        } else {
+            System.out.println("PIN verification failed. SW: " + Integer.toHexString(response.getSW()));
         }
-        return hexString.toString();
     }
 }
