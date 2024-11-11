@@ -1,2 +1,2 @@
-javac src/terminal/TerminalApp.java
+javac src/terminal/TerminalApp.java && \
 java -cp src terminal.TerminalApp
