@@ -1,7 +1,6 @@
 package terminal;
 
 
-
 import javax.crypto.BadPaddingException;
 import javax.crypto.Cipher;
 import javax.crypto.IllegalBlockSizeException;
@@ -9,8 +8,6 @@ import javax.crypto.NoSuchPaddingException;
 import javax.smartcardio.*;
 import java.math.BigInteger;
 import java.security.*;
-import java.security.interfaces.RSAPrivateKey;
-import java.security.interfaces.RSAPublicKey;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.RSAPrivateKeySpec;
 import java.security.spec.RSAPublicKeySpec;
@@ -145,7 +142,7 @@ public class TerminalApp {
                 GET_CARD_PUBLIC_KEY_INSTRUCTION, // INS
                 0x00, // P1
                 0x00, // P2
-                250); // NE / LE (max response length)
+                256); // NE / LE (max response length)
         ResponseAPDU response = channel.transmit(command);
         System.out.println("Get bytes Response: " + byteArrayToHex(response.getBytes()));
         System.out.println("Get data Response: " + byteArrayToHex(response.getData()) + " lenght: " + response.getData().length);
@@ -192,17 +189,22 @@ public class TerminalApp {
 
         // Parse the lengths of P, Q, and e
         int pLength = ((data[0] & 0xFF) << 8) | (data[1] & 0xFF);  // Extract pLength (2 bytes)
-        int qLength = ((data[2] & 0xFF) << 8) | (data[3] & 0xFF);  // Extract qLength (2 bytes)
-        int eLength = ((data[4] & 0xFF) << 8) | (data[5] & 0xFF);  // Extract eLength (2 bytes)
 
-        System.out.println("Elength: " + eLength + "plength: " + pLength + "qlength: " + qLength);
+        int qLength = ((data[pLength + 2] & 0xFF) << 8) | (data[pLength + 2 + 1] & 0xFF);  // Extract qLength (2 bytes)
 
-        // Extract P, Q, and e based on their lengths
-        int offset = 6; // Skip the first 6 bytes which are lengths
+        int eLength = ((data[2 + pLength + 2 + qLength] & 0xFF) << 8) | (data[2 + pLength + 2 + qLength + 1] & 0xFF);  // Extract qLength (2 bytes)
+
+
+        System.out.println("plength: " + pLength + " qlength: " + qLength + " eLength: " + eLength);
+
+        // Extract P, Q, E
+        int offset = 2;
         BigInteger p = new BigInteger(1, extractComponent(data, offset, pLength));
         offset += pLength;
+        offset += 2;
         BigInteger q = new BigInteger(1, extractComponent(data, offset, qLength));
         offset += qLength;
+        offset += 2;
         BigInteger e = new BigInteger(1, extractComponent(data, offset, eLength));
 
         // Calculate modulus N = P * Q

@@ -1,7 +1,10 @@
 package ewallet;
 
 import javacard.framework.*;
-import javacard.security.*;
+import javacard.security.KeyBuilder;
+import javacard.security.KeyPair;
+import javacard.security.RSAPrivateCrtKey;
+import javacard.security.RSAPublicKey;
 
 public class EWallet extends Applet {
 
@@ -113,17 +116,37 @@ public class EWallet extends Applet {
     }
 
     private void sendCardPrivateKey(APDU apdu) {
+        short lengthDiscriminatorSize = 2; // determines the space (in bytes) that is used to indicate the size of p resp. q
         byte[] buffer = apdu.getBuffer();
         short offset = 0;
 
         // Retrieve the modulus and private exponent of the private key
+        offset += lengthDiscriminatorSize;
         short pLength = cardRsaPrivateKey.getP(buffer, offset);
+        // Put plength in the first two bytes
+        buffer[0] = (byte) (pLength >> 8);
+        buffer[1] = (byte) pLength;
+
         offset += pLength;
+
+        offset += lengthDiscriminatorSize;
         short qLength = cardRsaPrivateKey.getQ(buffer, offset);
+
+        // Put qlength in the corresponding bytes
+        buffer[(short) (pLength + lengthDiscriminatorSize)] = (byte) (qLength >> 8);
+        buffer[(short) (pLength + lengthDiscriminatorSize + 1)] = (byte) qLength;
+
         offset += qLength;
 
+        offset += lengthDiscriminatorSize;
+        short eLength = cardRsaPublicKey.getExponent(buffer, offset);
+
+        // Put elength in the corresponding bytes
+        buffer[(short) (lengthDiscriminatorSize + pLength + lengthDiscriminatorSize + qLength)] = (byte) (eLength >> 8);
+        buffer[(short) (lengthDiscriminatorSize + pLength + lengthDiscriminatorSize + qLength + 1)] = (byte) eLength;
+
         // Total length of modulus + exponent
-        short totalLength = (short) (pLength + qLength);
+        short totalLength = (short) (lengthDiscriminatorSize + pLength + lengthDiscriminatorSize + qLength + lengthDiscriminatorSize + eLength);
         apdu.setOutgoing();
         apdu.setOutgoingLength(totalLength);
 
