@@ -1,9 +1,7 @@
-/**
- *
- */
 package ewallet;
 
 import javacard.framework.*;
+import javacard.security.*;
 
 public class EWallet extends Applet {
 
@@ -12,8 +10,18 @@ public class EWallet extends Applet {
     private byte[] pinBuffer = new byte[PIN_LENGTH]; // Buffer to hold PIN sent from terminal
     private boolean cardUnlocked = false;
 
+    // Variables to store the card's KeyPair
+    private KeyPair cardRsaKeyPair;
+    private RSAPublicKey cardRsaPublicKey;
+    private RSAPrivateCrtKey cardRsaPrivateKey;
 
-    // Install method (called when the applet is installed on the card)
+    protected EWallet() {
+        cardRsaKeyPair = new KeyPair(KeyPair.ALG_RSA_CRT, KeyBuilder.LENGTH_RSA_512);
+        cardRsaKeyPair.genKeyPair();
+        cardRsaPublicKey = (RSAPublicKey) cardRsaKeyPair.getPublic();
+        cardRsaPrivateKey = (RSAPrivateCrtKey) cardRsaKeyPair.getPrivate();
+    }
+
     public static void install(byte[] bArray, short bOffset, byte bLength) {
         new EWallet().register();
     }
@@ -29,13 +37,19 @@ public class EWallet extends Applet {
             case 0x20:  // Command to verify PIN
                 verifyPin(apdu);
                 break;
+            case 0x22:
+                sendCardPublicKey(apdu);
+                break;
+            case 0x24:
+                requiresUnlockedCard();
+                sendCardPrivateKey(apdu);
+                break;
             default:
                 // good practice: If you don't know the INStruction, say so:
                 ISOException.throwIt(ISO7816.SW_INS_NOT_SUPPORTED);
         }
     }
 
-    // Method to verify the PIN sent from the terminal
     private void verifyPin(APDU apdu) {
         apdu.setIncomingAndReceive();
         byte[] buffer = apdu.getBuffer();
@@ -60,19 +74,61 @@ public class EWallet extends Applet {
 
     private void unlockAndSendSuccessResponse(APDU apdu) {
         cardUnlocked = true;
-        sendSuccessResponse(apdu);
-    }
-
-    private void sendSuccessResponse(APDU apdu) {
-        // Prepare the response buffer with the success status word
-        byte highByte = (byte) (ISO7816.SW_NO_ERROR >> 8); // High byte (0x90)
-        byte lowByte = (byte) (ISO7816.SW_NO_ERROR & 0xFF); // Low byte (0x00)
-        apdu.getBuffer()[0] = highByte;
-        apdu.getBuffer()[1] = lowByte;
+        setResponseCode(apdu, ISO7816.SW_NO_ERROR);
 
         // Send the success status word (2 bytes) as the response
-        apdu.setOutgoingAndSend((short) 0, (short) 2); //offset = 0, length = 2 bytes
+        apdu.setOutgoingAndSend((short) 0, (short) 2); // offset = 0, length = 2 bytes
     }
 
-    //TODO: Add helper function to check, if card is unlocked and send error if necessary
+    private void setResponseCode(APDU apdu, short code) {
+        // Prepare the response buffer with the success status word
+        byte highByte = (byte) (code >> 8); // High byte (0x90)
+        byte lowByte = (byte) (code & 0xFF); // Low byte (0x00)
+        apdu.getBuffer()[0] = highByte;
+        apdu.getBuffer()[1] = lowByte;
+    }
+
+    private void requiresUnlockedCard() {
+        if (!cardUnlocked) {
+            ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED);
+        }
+    }
+
+    private void sendCardPublicKey(APDU apdu) {
+        byte[] buffer = apdu.getBuffer();
+        short offset = 0;
+
+        // Retrieve modulus and exponent lengths
+        short modLength = cardRsaPublicKey.getModulus(buffer, offset);
+        offset += modLength;
+        short expLength = cardRsaPublicKey.getExponent(buffer, offset);
+        offset += expLength;
+
+        // Set the outgoing length to the total length of modulus and exponent
+        short totalLength = (short) (modLength + expLength);
+        apdu.setOutgoing();
+        apdu.setOutgoingLength(totalLength);
+
+        apdu.sendBytesLong(buffer, (short) 0, totalLength);
+    }
+
+    private void sendCardPrivateKey(APDU apdu) {
+        byte[] buffer = apdu.getBuffer();
+        short offset = 0;
+
+        // Retrieve the modulus and private exponent of the private key
+        short pLength = cardRsaPrivateKey.getP(buffer, offset);
+        offset += pLength;
+        short qLength = cardRsaPrivateKey.getQ(buffer, offset);
+        offset += qLength;
+
+        // Total length of modulus + exponent
+        short totalLength = (short) (pLength + qLength);
+        apdu.setOutgoing();
+        apdu.setOutgoingLength(totalLength);
+
+        // Send the modulus and exponent back to the terminal
+        apdu.sendBytesLong(buffer, (short) 0, totalLength);
+    }
+
 }
