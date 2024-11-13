@@ -5,6 +5,7 @@ import javacard.security.KeyBuilder;
 import javacard.security.KeyPair;
 import javacard.security.RSAPrivateCrtKey;
 import javacard.security.RSAPublicKey;
+import javacardx.crypto.*;
 
 public class EWallet extends Applet {
 
@@ -12,6 +13,8 @@ public class EWallet extends Applet {
     private static final byte PIN_LENGTH = 4; // Assuming PIN length is 4 digits
     private byte[] pinBuffer = new byte[PIN_LENGTH]; // Buffer to hold PIN sent from terminal
     private boolean cardUnlocked = false;
+
+    private Cipher cipher;
 
     // Variables to store the card's KeyPair
     private KeyPair cardRsaKeyPair;
