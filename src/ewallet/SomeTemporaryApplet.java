@@ -5,14 +5,14 @@ package ewallet;
 
 import javacard.framework.*;
 
-public class EWalletTest extends Applet {
+public class SomeTemporaryApplet extends Applet {
     // Define an instruction code for getting data
     private static final byte INS_GET_DATA = (byte) 0x10;
     private static final byte INS_CHECK_DATA = (byte) 0x20;
     private static final byte[] EXPECTED_DATA = {'1', '2', '3', '4'};
 
     public static void install(byte[] bArray, short bOffset, byte bLength) {
-        new EWalletTest().register();
+        new SomeTemporaryApplet().register();
     }
 
     public void process(APDU apdu) {

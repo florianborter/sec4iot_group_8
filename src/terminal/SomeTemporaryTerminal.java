@@ -2,7 +2,7 @@ package terminal;
 
 import javax.smartcardio.*;
 
-public class TerminalAppTest {
+public class SomeTemporaryTerminal {
     public static void main(String[] args) {
         byte[] aid = new byte[]{(byte) 0xA0, 0x00, 0x00, 0x00, 0x62, 0x03, 0x01, 0x0C, 0x06, 0x01, 0x02};
 
