@@ -6,6 +6,7 @@ import java.nio.ByteBuffer;
 import java.security.*;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.RSAPublicKeySpec;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Scanner;
 
@@ -96,6 +97,10 @@ public class TerminalApp {
             // Encrypt some data
             testOnCardEncryption(channel, serverPrivateKey, cardPublicKey);
 
+
+            System.out.println("\n\n\n\nTest encryption and decryption of a bigger text:");
+            testOnCardEncryptionChunking(channel, serverPrivateKey, cardPublicKey);
+
             // Disconnect the card
             card.disconnect(false);
         } catch (Exception e) {
@@ -123,6 +128,59 @@ public class TerminalApp {
         // Verify the signature
         boolean isSignatureValid = verifySignature(cardPublicKey, cipherText, signature);
         System.out.println("Signature valid? " + isSignatureValid);
+    }
+
+    private static void testOnCardEncryptionChunking(CardChannel channel, PrivateKey serverPrivateKey, PublicKey cardPublicKey) throws Exception {
+        String plaintext = "1111111111222222222233333333334444444444555555555566611111111112222222222333333333344444444445555555555666asdf\nasdf1111111111222222222233333333334444444444555555555566611111111112222222222333333333344444444445555555555666asdf\nasdf"; // Max 53 bytes (do chunking otherwise)
+        System.out.println("Plaintext to encrypt: " + plaintext);
+        byte[] dataToEncrypt = plaintext.getBytes();
+
+        int chunkSize = 53;
+        List<byte[]> encryptedChunks = new ArrayList<>();
+        List<byte[]> signatures = new ArrayList<>();
+
+        for (int i = 0; i < dataToEncrypt.length; i += chunkSize) {
+            int remaining = dataToEncrypt.length - i;
+            int currentChunkSize = Math.min(remaining, chunkSize);
+
+            byte[] chunk = new byte[currentChunkSize];
+            System.arraycopy(dataToEncrypt, i, chunk, 0, currentChunkSize);
+
+            byte[] cipherTextAndSignature = encryptDataOnCard(chunk, channel);
+            System.out.println("Received ciphertext and Signature for chunk: " + byteArrayToHex(cipherTextAndSignature));
+
+            // Extract the encrypted data and signature
+            byte[] cipherText = new byte[CIPHER_TEXT_LENGTH];
+            byte[] signature = new byte[SIGNATURE_LENGTH];
+            System.arraycopy(cipherTextAndSignature, 0, cipherText, 0, CIPHER_TEXT_LENGTH);
+            System.arraycopy(cipherTextAndSignature, CIPHER_TEXT_LENGTH, signature, 0, SIGNATURE_LENGTH);
+
+            encryptedChunks.add(cipherText);
+            signatures.add(signature);
+        }
+
+        // Decrypt combined ciphertext
+        for (byte[] chunk : encryptedChunks) {
+            byte[] decryptedCardData = decryptData(chunk, serverPrivateKey);
+            System.out.println("Decrypted Cipher Text: " + new String(decryptedCardData));
+        }
+
+        for (int i = 0; i < signatures.size(); i++) {
+            // Verify combined signature (simplified example, adjust verification process as needed)
+            boolean isSignatureValid = verifySignature(cardPublicKey, encryptedChunks.get(i), signatures.get(i));
+            System.out.println("Signature valid? " + isSignatureValid);
+        }
+    }
+
+    private static byte[] combineChunks(List<byte[]> chunks) {
+        int totalLength = chunks.stream().mapToInt(chunk -> chunk.length).sum();
+        byte[] combined = new byte[totalLength];
+        int offset = 0;
+        for (byte[] chunk : chunks) {
+            System.arraycopy(chunk, 0, combined, offset, chunk.length);
+            offset += chunk.length;
+        }
+        return combined;
     }
 
     private static byte[] encryptDataOnCard(byte[] dataToEncrypt, CardChannel channel) throws CardException {
