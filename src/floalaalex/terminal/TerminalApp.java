@@ -5,11 +5,9 @@ import javax.crypto.BadPaddingException;
 import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.NoSuchPaddingException;
 import javax.smartcardio.*;
-import java.math.BigInteger;
 import java.nio.ByteBuffer;
 import java.security.*;
 import java.security.spec.InvalidKeySpecException;
-import java.security.spec.RSAPrivateKeySpec;
 import java.security.spec.RSAPublicKeySpec;
 import java.util.Arrays;
 import java.util.List;
@@ -30,7 +28,6 @@ public class TerminalApp {
     private static final byte CARD_ENCRYPT_AND_SIGN_DATA_INSTRUCTION = (byte) 0x32;
     private static final byte GET_SERVER_PUBLIC_KEY_INSTRUCTION = (byte) 0x40;
 
-    private static final short statusWordLength = 2; // Two Bytes
     private static final short MODULUS_LENGTH = 64; //64 since we use RSA-512
     private static final short CIPHER_LENGTH = 64; //64 since we use RSA-512
     private static final short SIGNATURE_LENGTH = 64; //64 since we use RSA-512
@@ -245,51 +242,9 @@ public class TerminalApp {
         byte[] data = response.getData();
         System.out.println("Get privatekey bytes Response: " + byteArrayToHex(data));
 
-        // Parse the lengths of P, Q, and e
-        int pLength = ((data[0] & 0xFF) << 8) | (data[1] & 0xFF);  // Extract pLength (2 bytes)
-
-        int qLength = ((data[pLength + 2] & 0xFF) << 8) | (data[pLength + 2 + 1] & 0xFF);  // Extract qLength (2 bytes)
-
-        int eLength = ((data[2 + pLength + 2 + qLength] & 0xFF) << 8) | (data[2 + pLength + 2 + qLength + 1] & 0xFF);  // Extract qLength (2 bytes)
-
-
-        System.out.println("plength: " + pLength + " qlength: " + qLength + " eLength: " + eLength);
-
-        // Extract P, Q, E
-        int offset = 2;
-        BigInteger p = new BigInteger(1, extractComponent(data, offset, pLength));
-        offset += pLength;
-        offset += 2;
-        BigInteger q = new BigInteger(1, extractComponent(data, offset, qLength));
-        offset += qLength;
-        offset += 2;
-        BigInteger e = new BigInteger(1, extractComponent(data, offset, eLength));
-
-        // Calculate modulus N = P * Q
-        BigInteger n = p.multiply(q);
-
-        // Calculate φ(N) = (P - 1)(Q - 1)
-        BigInteger phiN = (p.subtract(BigInteger.ONE)).multiply(q.subtract(BigInteger.ONE));
-
-        // Calculate private exponent D = e^(-1) mod φ(N)
-        BigInteger d = e.modInverse(phiN);
-
-        // Create RSA PrivateKeySpec with N and D
-        RSAPrivateKeySpec privateKeySpec = new RSAPrivateKeySpec(n, d);
-
-        // Generate the PrivateKey object
-        KeyFactory keyFactory = KeyFactory.getInstance("RSA");
-        PrivateKey privateKey = keyFactory.generatePrivate(privateKeySpec);
+        PrivateKey privateKey = parsePrivateKeyFromByteArray(data);
 
         return privateKey;
-    }
-
-
-    // Utility method to extract a component from the byte array (Exponent, Modulus, P or Q)
-    private static byte[] extractComponent(byte[] data, int offset, int length) {
-        byte[] component = new byte[length];
-        System.arraycopy(data, offset, component, 0, length);
-        return component;
     }
 
     private static void sendServerPublicKey(CardChannel channel, byte[] modulus, byte[] exponent) throws Exception {

@@ -93,18 +93,6 @@ public class EWallet extends Applet {
 
     private void unlockAndSendSuccessResponse(APDU apdu) {
         cardUnlocked = true;
-        setResponseCode(apdu, ISO7816.SW_NO_ERROR);
-
-        // Send the success status word (2 bytes) as the response
-        apdu.setOutgoingAndSend((short) 0, (short) 2); // offset = 0, length = 2 bytes
-    }
-
-    private void setResponseCode(APDU apdu, short code) {
-        // Prepare the response buffer with the success status word
-        byte highByte = (byte) (code >> 8); // High byte (0x90)
-        byte lowByte = (byte) (code & 0xFF); // Low byte (0x00)
-        apdu.getBuffer()[0] = highByte;
-        apdu.getBuffer()[1] = lowByte;
     }
 
     private void requiresUnlockedCard() {
@@ -115,16 +103,8 @@ public class EWallet extends Applet {
 
     private void sendCardPublicKey(APDU apdu) {
         byte[] buffer = apdu.getBuffer();
-        short offset = 0;
-
         // Retrieve modulus and exponent lengths
-        short modLength = cardRsaPublicKey.getModulus(buffer, offset);
-        offset += modLength;
-        short expLength = cardRsaPublicKey.getExponent(buffer, offset);
-        offset += expLength;
-
-        // Set the outgoing length to the total length of modulus and exponent
-        short totalLength = (short) (modLength + expLength);
+        short totalLength = concatenateModulusAndExponent(cardRsaPublicKey, buffer);
         apdu.setOutgoing();
         apdu.setOutgoingLength(totalLength);
 
@@ -133,29 +113,61 @@ public class EWallet extends Applet {
 
     private void sendServerPublicKey(APDU apdu) {
         byte[] buffer = apdu.getBuffer();
-        short offset = 0;
-
         // Retrieve modulus and exponent lengths
-        short modLength = serverRsaPublicKey.getModulus(buffer, offset);
-        offset += modLength;
-        short expLength = serverRsaPublicKey.getExponent(buffer, offset);
-        offset += expLength;
-
-        // Set the outgoing length to the total length of modulus and exponent
-        short totalLength = (short) (modLength + expLength);
+        short totalLength = concatenateModulusAndExponent(serverRsaPublicKey, buffer);
         apdu.setOutgoing();
         apdu.setOutgoingLength(totalLength);
 
         apdu.sendBytesLong(buffer, (short) 0, totalLength);
     }
 
+    /**
+     * This function concatenates the modulus and exponent into the buffer. The size of the modulus is 64 Bytes (using RSA-512)
+     *
+     * @param cardRsaPublicKey the public key to concatenate
+     * @param buffer           the buffer to write the concatenated values into
+     * @return the total length of the modulus and exponent in bytes
+     */
+    private short concatenateModulusAndExponent(RSAPublicKey cardRsaPublicKey, byte[] buffer) {
+        short offset = 0;
+        // Retrieve modulus and exponent lengths
+        short modLength = cardRsaPublicKey.getModulus(buffer, offset);
+        offset += modLength;
+        short expLength = cardRsaPublicKey.getExponent(buffer, offset);
+        // offset += expLength;
+
+        return (short) (modLength + expLength);
+    }
+
     private void sendCardPrivateKey(APDU apdu) {
-        short lengthDiscriminatorSize = 2; // determines the space (in bytes) that is used to indicate the size of p resp. q
         byte[] buffer = apdu.getBuffer();
+
+        short totalLength = concatenatePQEForTransport(buffer);
+
+        apdu.setOutgoing();
+        apdu.setOutgoingLength(totalLength);
+
+        // Send the modulus and exponent back to the terminal
+        apdu.sendBytesLong(buffer, (short) 0, totalLength);
+    }
+
+    /**
+     * Concatenates the P, Q and E in the following format:
+     * -------------------------------------------
+     * | pLength | P | qLength | Q | eLength | E |
+     * -------------------------------------------
+     * and writes it into the buffer
+     * There is no delimiter used. always 2 bytes are used to indicate the length of P, Q and E
+     *
+     * @param buffer the Buffer, where the concatenated PQE are written to
+     * @return the size of the concatenated
+     */
+    private short concatenatePQEForTransport(byte[] buffer) {
+        short lengthIndicatorSize = 2; // determines the space (in bytes) that is used to indicate the size of p resp. q
         short offset = 0;
 
         // Retrieve the modulus and private exponent of the private key
-        offset += lengthDiscriminatorSize;
+        offset += lengthIndicatorSize;
         short pLength = cardRsaPrivateKey.getP(buffer, offset);
         // Put plength in the first two bytes
         buffer[0] = (byte) (pLength >> 8);
@@ -163,36 +175,30 @@ public class EWallet extends Applet {
 
         offset += pLength;
 
-        offset += lengthDiscriminatorSize;
+        offset += lengthIndicatorSize;
         short qLength = cardRsaPrivateKey.getQ(buffer, offset);
 
         // Put qlength in the corresponding bytes
-        buffer[(short) (pLength + lengthDiscriminatorSize)] = (byte) (qLength >> 8);
-        buffer[(short) (pLength + lengthDiscriminatorSize + 1)] = (byte) qLength;
+        buffer[(short) (pLength + lengthIndicatorSize)] = (byte) (qLength >> 8);
+        buffer[(short) (pLength + lengthIndicatorSize + 1)] = (byte) qLength;
 
         offset += qLength;
 
-        offset += lengthDiscriminatorSize;
+        offset += lengthIndicatorSize;
         short eLength = cardRsaPublicKey.getExponent(buffer, offset);
 
         // Put elength in the corresponding bytes
-        buffer[(short) (lengthDiscriminatorSize + pLength + lengthDiscriminatorSize + qLength)] = (byte) (eLength >> 8);
-        buffer[(short) (lengthDiscriminatorSize + pLength + lengthDiscriminatorSize + qLength + 1)] = (byte) eLength;
+        buffer[(short) (lengthIndicatorSize + pLength + lengthIndicatorSize + qLength)] = (byte) (eLength >> 8);
+        buffer[(short) (lengthIndicatorSize + pLength + lengthIndicatorSize + qLength + 1)] = (byte) eLength;
 
-        // Total length of modulus + exponent
-        short totalLength = (short) (lengthDiscriminatorSize + pLength + lengthDiscriminatorSize + qLength + lengthDiscriminatorSize + eLength);
-        apdu.setOutgoing();
-        apdu.setOutgoingLength(totalLength);
-
-        // Send the modulus and exponent back to the floalaalex.terminal
-        apdu.sendBytesLong(buffer, (short) 0, totalLength);
+        // Total length of p + q + e + (three times the length indicator
+        return (short) (lengthIndicatorSize + pLength + lengthIndicatorSize + qLength + lengthIndicatorSize + eLength);
     }
 
     private void receiveServerPublicKey(APDU apdu) {
         apdu.setIncomingAndReceive();
         byte[] buffer = apdu.getBuffer();
 
-        // Initialize floalaalex.terminal's RSA public key only when receiving it
         serverRsaPublicKey = (RSAPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_RSA_PUBLIC, KeyBuilder.LENGTH_RSA_512, false);
 
         short modLength = (short) (buffer[ISO7816.OFFSET_CDATA] & 0xFF);
@@ -209,7 +215,6 @@ public class EWallet extends Applet {
 
         // Initialize the cipher for encryption with the server's public key
         cipher.init(serverRsaPublicKey, Cipher.MODE_ENCRYPT);
-
         // Encrypt the incoming data
         byte[] encryptedData = new byte[CIPHER_LENGTH];
         short encLength = cipher.doFinal(buffer, dataOffset, dataLength, encryptedData, (short) 0);
@@ -217,7 +222,6 @@ public class EWallet extends Applet {
         // Initialize the signature object for signing with the card's private key
         Signature signature = Signature.getInstance(Signature.ALG_RSA_SHA_PKCS1, false);
         signature.init(cardRsaPrivateKey, Signature.MODE_SIGN);
-
         // Sign the encrypted data
         byte[] signatureData = new byte[SIGNATURE_LENGTH];
         short sigLength = signature.sign(encryptedData, (short) 0, encLength, signatureData, (short) 0);
