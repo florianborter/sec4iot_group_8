@@ -66,8 +66,8 @@ public class CryptoUtil {
      *
      * @param data Data in the correct format
      * @return The parsed private key
-     * @throws NoSuchAlgorithmException
-     * @throws InvalidKeySpecException
+     * @throws NoSuchAlgorithmException if algorithm could not be found
+     * @throws InvalidKeySpecException if KeySpec is invalid
      */
     public static PrivateKey parsePrivateKeyFromByteArray(byte[] data) throws NoSuchAlgorithmException, InvalidKeySpecException {
         // Parse the lengths of P, Q, and e
@@ -102,8 +102,7 @@ public class CryptoUtil {
 
         // Generate the PrivateKey object
         KeyFactory keyFactory = KeyFactory.getInstance("RSA");
-        PrivateKey privateKey = keyFactory.generatePrivate(privateKeySpec);
-        return privateKey;
+        return keyFactory.generatePrivate(privateKeySpec);
     }
 
     // Utility method to extract a component from the byte array (Exponent, Modulus, P or Q)
