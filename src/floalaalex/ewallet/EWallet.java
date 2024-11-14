@@ -35,8 +35,8 @@ public class EWallet extends Applet {
     private static final byte INS_RECEIVE_SERVER_PUBLIC_KEY = 0x30;
     private static final byte INS_ENCRYPT_AND_SIGN_DATA = 0x32;
     private static final byte INS_SEND_SERVER_PUBLIC_KEY = 0x40;
-    private static final byte SET_IP_ADDRESS_INSTRUCTION = (byte) 0x50;
-    private static final byte GET_IP_ADDRESS_INSTRUCTION = (byte) 0x52;
+    private static final byte SET_IP_ADDRESS = (byte) 0x50;
+    private static final byte GET_IP_ADDRESS = (byte) 0x52;
 
 
     protected EWallet() {
@@ -68,6 +68,7 @@ public class EWallet extends Applet {
                 verifyPin(apdu);
                 break;
             case INS_UPDATE_PIN:
+                requiresUnlockedCard();
                 updatePin(apdu);
                 break;
             case INS_SEND_CARD_PUBLIC_KEY:
@@ -78,6 +79,7 @@ public class EWallet extends Applet {
                 sendCardPrivateKey(apdu);
                 break;
             case INS_RECEIVE_SERVER_PUBLIC_KEY:
+                requiresUnlockedCard();
                 receiveServerPublicKey(apdu);
                 break;
             case INS_ENCRYPT_AND_SIGN_DATA:
@@ -87,10 +89,11 @@ public class EWallet extends Applet {
             case INS_SEND_SERVER_PUBLIC_KEY:
                 sendServerPublicKey(apdu);
                 break;
-            case SET_IP_ADDRESS_INSTRUCTION:
+            case SET_IP_ADDRESS:
+                requiresUnlockedCard();
                 setIpAddress(apdu);
                 break;
-            case GET_IP_ADDRESS_INSTRUCTION:
+            case GET_IP_ADDRESS:
                 getIpAddress(apdu);
                 break;
             default:
