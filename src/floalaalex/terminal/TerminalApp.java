@@ -172,17 +172,6 @@ public class TerminalApp {
         }
     }
 
-    private static byte[] combineChunks(List<byte[]> chunks) {
-        int totalLength = chunks.stream().mapToInt(chunk -> chunk.length).sum();
-        byte[] combined = new byte[totalLength];
-        int offset = 0;
-        for (byte[] chunk : chunks) {
-            System.arraycopy(chunk, 0, combined, offset, chunk.length);
-            offset += chunk.length;
-        }
-        return combined;
-    }
-
     private static byte[] encryptDataOnCard(byte[] dataToEncrypt, CardChannel channel) throws CardException {
         CommandAPDU encryptDataAPDU = new CommandAPDU(0x00, // CLA
                 CARD_ENCRYPT_AND_SIGN_DATA_INSTRUCTION, // INS (Check Data instruction)
