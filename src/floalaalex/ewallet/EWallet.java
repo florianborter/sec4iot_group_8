@@ -1,4 +1,4 @@
-package ewallet;
+package floalaalex.ewallet;
 
 import javacard.framework.*;
 import javacard.security.*;
@@ -8,9 +8,10 @@ public class EWallet extends Applet {
 
     private static final byte[] PIN = {'1', '2', '3', '4'};
     private static final byte PIN_LENGTH = 4; // Assuming PIN length is 4 digits
-    private byte[] pinBuffer = new byte[PIN_LENGTH]; // Buffer to hold PIN sent from terminal
+    private byte[] pinBuffer = new byte[PIN_LENGTH]; // Buffer to hold PIN sent from floalaalex.terminal
     private boolean cardUnlocked = false;
-    private static final short RSA_512_NUM_BYTES = 64; //64 since we use RSA-512
+    private static final short CIPHER_LENGTH = 64; //64 since we use RSA-512
+    private static final short SIGNATURE_LENGTH = 64; //64 since we use RSA-512
 
     private Cipher cipher;
 
@@ -183,7 +184,7 @@ public class EWallet extends Applet {
         apdu.setOutgoing();
         apdu.setOutgoingLength(totalLength);
 
-        // Send the modulus and exponent back to the terminal
+        // Send the modulus and exponent back to the floalaalex.terminal
         apdu.sendBytesLong(buffer, (short) 0, totalLength);
     }
 
@@ -191,7 +192,7 @@ public class EWallet extends Applet {
         apdu.setIncomingAndReceive();
         byte[] buffer = apdu.getBuffer();
 
-        // Initialize terminal's RSA public key only when receiving it
+        // Initialize floalaalex.terminal's RSA public key only when receiving it
         serverRsaPublicKey = (RSAPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_RSA_PUBLIC, KeyBuilder.LENGTH_RSA_512, false);
 
         short modLength = (short) (buffer[ISO7816.OFFSET_CDATA] & 0xFF);
@@ -210,7 +211,7 @@ public class EWallet extends Applet {
         cipher.init(serverRsaPublicKey, Cipher.MODE_ENCRYPT);
 
         // Encrypt the incoming data
-        byte[] encryptedData = new byte[RSA_512_NUM_BYTES];
+        byte[] encryptedData = new byte[CIPHER_LENGTH];
         short encLength = cipher.doFinal(buffer, dataOffset, dataLength, encryptedData, (short) 0);
 
         // Initialize the signature object for signing with the card's private key
@@ -218,7 +219,7 @@ public class EWallet extends Applet {
         signature.init(cardRsaPrivateKey, Signature.MODE_SIGN);
 
         // Sign the encrypted data
-        byte[] signatureData = new byte[RSA_512_NUM_BYTES];
+        byte[] signatureData = new byte[SIGNATURE_LENGTH];
         short sigLength = signature.sign(encryptedData, (short) 0, encLength, signatureData, (short) 0);
 
         // Combine the encrypted data and the signature

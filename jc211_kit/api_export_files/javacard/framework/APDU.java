@@ -155,7 +155,7 @@ public final class APDU{
   private static final byte ACK_INS = (byte)1;
   private static final byte ACK_NOT_INS = (byte)2;
 
-  // Le = terminal expected length
+  // Le = floalaalex.terminal expected length
   private short getLe() {
     if ( ramVars[LE]==(byte)0 ) return (short) 256;
     else return (short)(ramVars[LE] & 0xFF);
@@ -169,7 +169,7 @@ public final class APDU{
     }
   private void setLr( byte data ) { ramVars[LR] = data; }
 
-  // Lc = terminal incoming length
+  // Lc = floalaalex.terminal incoming length
   private byte getLc() { return ramVars[LC]; }
   private void setLc( byte data ) { ramVars[LC] = data; }
 

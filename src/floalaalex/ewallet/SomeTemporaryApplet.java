@@ -1,7 +1,7 @@
 /**
  *
  */
-package ewallet;
+package floalaalex.ewallet;
 
 import javacard.framework.*;
 
