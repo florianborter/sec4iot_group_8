@@ -5,19 +5,21 @@ import java.math.BigInteger;
 import java.security.*;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.RSAPrivateKeySpec;
+import java.security.spec.RSAPublicKeySpec;
+import java.util.Arrays;
 
 public class CryptoUtil {
-
+    public static final short MODULUS_LENGTH = 64; //64 since we use RSA-512
 
     // Encrypt data using RSA public key
-    public static byte[] encryptData(String data, PublicKey publicKey) throws Exception {
+    public static byte[] testEncryptData(String data, PublicKey publicKey) throws Exception {
         Cipher cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding"); // RSA encryption with PKCS1 padding
         cipher.init(Cipher.ENCRYPT_MODE, publicKey);
         return cipher.doFinal(data.getBytes());
     }
 
     // Decrypt data using RSA private key
-    public static String decryptData(byte[] data, PrivateKey privateKey) throws Exception {
+    public static String testDecryptData(byte[] data, PrivateKey privateKey) throws Exception {
         Cipher cipher = Cipher.getInstance("RSA/ECB/PKCS1Padding"); // RSA decryption with PKCS1 padding
         cipher.init(Cipher.DECRYPT_MODE, privateKey);
         byte[] decryptedBytes = cipher.doFinal(data);
@@ -25,17 +27,33 @@ public class CryptoUtil {
     }
 
 
-    public static byte[] decryptCardData(byte[] encryptedData, PrivateKey privateKey) throws Exception {
+    public static byte[] decryptData(byte[] encryptedData, PrivateKey privateKey) throws Exception {
         Cipher cipher = Cipher.getInstance("RSA");
         cipher.init(Cipher.DECRYPT_MODE, privateKey);
         return cipher.doFinal(encryptedData);
     }
 
-    public static boolean verifySignature(PublicKey publicKey, byte[] data, byte[] signature) throws Exception {
+    public static boolean verifySignature(PublicKey publicKey, byte[] ciphertext, byte[] signature) throws Exception {
         Signature sig = Signature.getInstance("SHA1withRSA");
         sig.initVerify(publicKey);
-        sig.update(data);
+        sig.update(ciphertext);
         return sig.verify(signature);
+    }
+
+
+
+    public static PublicKey getRsaPublicKeyFromData(byte[] data) throws NoSuchAlgorithmException, InvalidKeySpecException {
+
+        byte[] modulusBytes = Arrays.copyOfRange(data, 0, MODULUS_LENGTH);
+        byte[] exponentBytes = Arrays.copyOfRange(data, MODULUS_LENGTH, data.length); // Convert the byte arrays to BigInteger
+        java.math.BigInteger modulus = new java.math.BigInteger(1, modulusBytes);
+        java.math.BigInteger exponent = new java.math.BigInteger(1, exponentBytes);
+
+        // Create RSA public key spec
+        RSAPublicKeySpec keySpec = new RSAPublicKeySpec(modulus, exponent);
+        // Generate the public key
+        KeyFactory keyFactory = KeyFactory.getInstance("RSA");
+        return keyFactory.generatePublic(keySpec);
     }
 
     /**
@@ -59,8 +77,6 @@ public class CryptoUtil {
 
         int eLength = ((data[2 + pLength + 2 + qLength] & 0xFF) << 8) | (data[2 + pLength + 2 + qLength + 1] & 0xFF);  // Extract qLength (2 bytes)
 
-
-        System.out.println("plength: " + pLength + " qlength: " + qLength + " eLength: " + eLength);
 
         // Extract P, Q, E
         int offset = 2;

@@ -8,7 +8,7 @@ public class EWallet extends Applet {
 
     private static final byte[] PIN = {'1', '2', '3', '4'};
     private static final byte PIN_LENGTH = 4; // Assuming PIN length is 4 digits
-    private byte[] pinBuffer = new byte[PIN_LENGTH]; // Buffer to hold PIN sent from floalaalex.terminal
+    private byte[] pinBuffer = new byte[PIN_LENGTH]; // Buffer to hold PIN sent from terminal
     private boolean cardUnlocked = false;
     private static final short CIPHER_LENGTH = 64; //64 since we use RSA-512
     private static final short SIGNATURE_LENGTH = 64; //64 since we use RSA-512

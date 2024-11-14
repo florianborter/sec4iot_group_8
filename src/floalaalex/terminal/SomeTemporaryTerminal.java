@@ -7,7 +7,7 @@ public class SomeTemporaryTerminal {
         byte[] aid = new byte[]{(byte) 0xA0, 0x00, 0x00, 0x00, 0x62, 0x03, 0x01, 0x0C, 0x06, 0x01, 0x02};
 
         try {
-            // Initialize card floalaalex.terminal and connect to the card
+            // Initialize card terminal and connect to the card
             TerminalFactory factory = TerminalFactory.getDefault();
             CardTerminal terminal = factory.terminals().list().get(0);
             Card card = terminal.connect("T=0");
@@ -22,7 +22,7 @@ public class SomeTemporaryTerminal {
             sendDataToApplet(channel, "2345");
 
             /*
-            Expected output in floalaalex.terminal:
+            Expected output in terminal:
             Select Applet Response: 9000
             Get Data Response: 429000
             Send Data Response: 9000
@@ -39,18 +39,9 @@ public class SomeTemporaryTerminal {
     }
 
     private static void selectApplet(CardChannel channel, byte[] aid) throws CardException {
-        // Command to select the applet
-        /*byte[] selectAppletCommand = {(byte) 0x00, // CLA (Class Byte, 0x00 = standard ISO/IEC 7816-4 command)
-                (byte) 0xA4, // (SELECT Command (0xA4): This command is used to select an applet on the smart card. It tells the card that the floalaalex.terminal (reader) wants to switch context to a specific applet identified by the provided AID. Once selected, subsequent commands will be routed to this applet until another SELECT command is issued or the card session is terminated)
-                (byte) 0x04, // P1 (P1: This byte specifies the selection method. For example, in the context of the SELECT command. 0x04: Select by AID (Application Identifier).)
-                (byte) 0x00, // P2 (P2: This byte specifies further details about the selection... 0x00: Indicates that the first or only occurrence of the specified AID should be selected.)
-                (byte) 0x0B, // Length of AID (0x0B = 11 -> 11 Bytes long AID)
-                (byte) 0xA0, (byte) 0x00, (byte) 0x00, (byte) 0x00, (byte) 0x62, (byte) 0x03, (byte) 0x01, (byte) 0x0C, (byte) 0x06, (byte) 0x01, (byte) 0x02 // AID (payload)
-        };
-        CommandAPDU selectAPDU = new CommandAPDU(selectAppletCommand);*/
         CommandAPDU selectAPDU = new CommandAPDU(
                 0x00, // CLA (Class Byte, 0x00 = standard ISO/IEC 7816-4 command)
-                0xA4, // INS (SELECT Command (0xA4): This command is used to select an applet on the smart card. It tells the card that the floalaalex.terminal (reader) wants to switch context to a specific applet identified by the provided AID. Once selected, subsequent commands will be routed to this applet until another SELECT command is issued or the card session is terminated)
+                0xA4, // INS (SELECT Command (0xA4): This command is used to select an applet on the smart card. It tells the card that the terminal (reader) wants to switch context to a specific applet identified by the provided AID. Once selected, subsequent commands will be routed to this applet until another SELECT command is issued or the card session is terminated)
                 0x04, // P1 (P1: This byte specifies the selection method. For example, in the context of the SELECT command. 0x04: Select by AID (Application Identifier).)
                 0x00, // P2 (P2: This byte specifies further details about the selection... 0x00: Indicates that the first or only occurrence of the specified AID should be selected.)
                 aid // AID (payload)

@@ -142,7 +142,7 @@ abstract public class Applet
     /**
      * Called by the JCRE to process an incoming APDU command.
      * An applet is expected to perform the action
-     * requested and return response data if any to the floalaalex.terminal.<p>
+     * requested and return response data if any to the terminal.<p>
      * Upon normal return from this
      * method the JCRE sends the ISO 7816-4 defined success status (90 00) in APDU response.
      * If this method throws an <code>ISOException</code> the JCRE sends the associated reason code as the
