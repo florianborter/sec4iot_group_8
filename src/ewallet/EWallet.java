@@ -5,7 +5,7 @@ import javacard.security.KeyBuilder;
 import javacard.security.KeyPair;
 import javacard.security.RSAPrivateCrtKey;
 import javacard.security.RSAPublicKey;
-import javacardx.crypto.*;
+import javacardx.crypto.Cipher;
 
 public class EWallet extends Applet {
 
@@ -13,6 +13,7 @@ public class EWallet extends Applet {
     private static final byte PIN_LENGTH = 4; // Assuming PIN length is 4 digits
     private byte[] pinBuffer = new byte[PIN_LENGTH]; // Buffer to hold PIN sent from terminal
     private boolean cardUnlocked = false;
+    private static final short MODULUS_LENGTH = 64; //64 since we use RSA-512
 
     private Cipher cipher;
 
@@ -21,11 +22,15 @@ public class EWallet extends Applet {
     private RSAPublicKey cardRsaPublicKey;
     private RSAPrivateCrtKey cardRsaPrivateKey;
 
+    // The verification server's public key
+    private RSAPublicKey serverRsaPublicKey;
+
     protected EWallet() {
         cardRsaKeyPair = new KeyPair(KeyPair.ALG_RSA_CRT, KeyBuilder.LENGTH_RSA_512);
         cardRsaKeyPair.genKeyPair();
         cardRsaPublicKey = (RSAPublicKey) cardRsaKeyPair.getPublic();
         cardRsaPrivateKey = (RSAPrivateCrtKey) cardRsaKeyPair.getPrivate();
+        cipher = Cipher.getInstance(Cipher.ALG_RSA_PKCS1, false); // Use PKCS1 padding
     }
 
     public static void install(byte[] bArray, short bOffset, byte bLength) {
@@ -49,6 +54,16 @@ public class EWallet extends Applet {
             case 0x24:
                 requiresUnlockedCard();
                 sendCardPrivateKey(apdu);
+                break;
+            case 0x30:
+                receiveServerPublicKey(apdu);
+                break;
+            case 0x32:
+                requiresUnlockedCard();
+                encryptData(apdu);
+                break;
+            case 0x40:
+                sendServerPublicKey(apdu);
                 break;
             default:
                 // good practice: If you don't know the INStruction, say so:
@@ -118,6 +133,24 @@ public class EWallet extends Applet {
         apdu.sendBytesLong(buffer, (short) 0, totalLength);
     }
 
+    private void sendServerPublicKey(APDU apdu) {
+        byte[] buffer = apdu.getBuffer();
+        short offset = 0;
+
+        // Retrieve modulus and exponent lengths
+        short modLength = serverRsaPublicKey.getModulus(buffer, offset);
+        offset += modLength;
+        short expLength = serverRsaPublicKey.getExponent(buffer, offset);
+        offset += expLength;
+
+        // Set the outgoing length to the total length of modulus and exponent
+        short totalLength = (short) (modLength + expLength);
+        apdu.setOutgoing();
+        apdu.setOutgoingLength(totalLength);
+
+        apdu.sendBytesLong(buffer, (short) 0, totalLength);
+    }
+
     private void sendCardPrivateKey(APDU apdu) {
         short lengthDiscriminatorSize = 2; // determines the space (in bytes) that is used to indicate the size of p resp. q
         byte[] buffer = apdu.getBuffer();
@@ -157,4 +190,34 @@ public class EWallet extends Applet {
         apdu.sendBytesLong(buffer, (short) 0, totalLength);
     }
 
+    private void receiveServerPublicKey(APDU apdu) {
+        apdu.setIncomingAndReceive();
+        byte[] buffer = apdu.getBuffer();
+
+        // Initialize terminal's RSA public key only when receiving it
+        serverRsaPublicKey = (RSAPublicKey) KeyBuilder.buildKey(KeyBuilder.TYPE_RSA_PUBLIC, KeyBuilder.LENGTH_RSA_512, false);
+
+        short modLength = (short) (buffer[ISO7816.OFFSET_CDATA] & 0xFF);
+        short expOffset = (short) (ISO7816.OFFSET_CDATA + 1 + modLength);
+        short expLength = (short) (buffer[expOffset] & 0xFF);
+        serverRsaPublicKey.setModulus(buffer, (short) (ISO7816.OFFSET_CDATA + 1), modLength);
+        serverRsaPublicKey.setExponent(buffer, (short) (expOffset + 1), expLength);
+    }
+
+    private void encryptData(APDU apdu) {
+        apdu.setIncomingAndReceive();
+        byte[] buffer = apdu.getBuffer();
+        short dataLength = buffer[ISO7816.OFFSET_LC]; // Correctly gets the size of the data
+
+        // Initialize the cipher for encryption with the server's public key
+        cipher.init(serverRsaPublicKey, Cipher.MODE_ENCRYPT);
+
+        // Encrypt the incoming data
+        byte[] encryptedData = new byte[MODULUS_LENGTH]; // Every cipher-text is as big as the modulus
+        short encLength = cipher.doFinal(buffer, ISO7816.OFFSET_CDATA, dataLength, encryptedData, (short) 0);
+
+        // Set the response with the encrypted data
+        Util.arrayCopy(encryptedData, (short) 0, buffer, (short) 0, encLength);
+        apdu.setOutgoingAndSend((short) 0, encLength);
+    }
 }

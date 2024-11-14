@@ -7,6 +7,7 @@ import javax.crypto.IllegalBlockSizeException;
 import javax.crypto.NoSuchPaddingException;
 import javax.smartcardio.*;
 import java.math.BigInteger;
+import java.nio.ByteBuffer;
 import java.security.*;
 import java.security.spec.InvalidKeySpecException;
 import java.security.spec.RSAPrivateKeySpec;
@@ -25,6 +26,9 @@ public class TerminalApp {
     private static final byte VERIFY_PIN_INSTRUCTION = (byte) 0x20;
     private static final byte GET_CARD_PUBLIC_KEY_INSTRUCTION = (byte) 0x22;
     private static final byte GET_CARD_PRIVATE_KEY_INSTRUCTION = (byte) 0x24;
+    private static final byte RECEIVE_SERVER_PUBLIC_KEY_INSTRUCTION = (byte) 0x30;
+    private static final byte CARD_ENCRYPT_DATA_INSTRUCTION = (byte) 0x32;
+    private static final byte GET_SERVER_PUBLIC_KEY_INSTRUCTION = (byte) 0x40;
 
     private static final short statusWordLength = 2; // Two Bytes
 
@@ -88,6 +92,54 @@ public class TerminalApp {
             // Decrypt with the private key
             String decryptedData = decryptData(encryptedData, cardPrivateKey);  // cardPrivateKey retrieved from the card
             System.out.println("Decrypted Data: " + decryptedData);
+
+
+            // Generate RSA-512 key pair
+            KeyPairGenerator keyGen = KeyPairGenerator.getInstance("RSA");
+            keyGen.initialize(512);
+            KeyPair serverKeyPair = keyGen.generateKeyPair();
+            PublicKey serverPublicKey = serverKeyPair.getPublic();
+            PrivateKey serverPrivateKey = serverKeyPair.getPrivate();
+            // Get the modulus and exponent
+            RSAPublicKeySpec pubKeySpec = KeyFactory.getInstance("RSA").getKeySpec(serverPublicKey, RSAPublicKeySpec.class);
+            byte[] serverModulus = pubKeySpec.getModulus().toByteArray();
+            // remove the potential extra sign byte from the toByteArray()
+            if (serverModulus[0] == 0x00 && serverModulus.length == 65) {
+                byte[] tmp = new byte[64];
+                System.arraycopy(serverModulus, 1, tmp, 0, 64);
+                serverModulus = tmp;
+            }
+            byte[] serverExponent = pubKeySpec.getPublicExponent().toByteArray();
+
+            sendServerPublicKey(channel, serverModulus, serverExponent);
+
+
+            System.out.println("test_enc_dec with server pub/priv Key: " + decryptData(encryptData("abcd", serverPublicKey), serverPrivateKey));
+
+            PublicKey copyServerPublicKey = retrieveServerPublicKey(channel);
+            System.out.println("copyServerPublicKey: " + copyServerPublicKey);
+            System.out.println("serverPublicKey: " + serverPublicKey);
+
+            System.out.println("\n\n\n\nNow lets encrypt some data on the card");
+            // Encrypt some data
+            byte[] dataToEncrypt = "1234567890".getBytes();
+            System.out.println("size: " + dataToEncrypt.length);
+            CommandAPDU encryptDataAPDU = new CommandAPDU(
+                    0x00, // CLA
+                    CARD_ENCRYPT_DATA_INSTRUCTION, // INS (Check Data instruction)
+                    0x00, // P1 -> 0x00 Placeholder
+                    0x00, // P2 -> 0x00 Placeholder
+                    dataToEncrypt, // Data for command
+                    0x00, // offset in the data
+                    dataToEncrypt.length, // LC (length of data)
+                    256); // NE resp. LE (max length of returning data)
+            ResponseAPDU encryptedResponse = channel.transmit(encryptDataAPDU);
+            System.out.println("SW from encrypt() on card: " + encryptedResponse.getSW());
+            byte[] encryptedCardData = encryptedResponse.getData();
+            System.out.println("Encrypted Card Data: " + byteArrayToHex(encryptedData));
+            // Decrypt the received encrypted data
+            byte[] decryptedCardData = decryptCardData(serverPrivateKey, encryptedCardData);
+            System.out.println("Decrypted Card Data: " + new String(decryptedCardData));
 
             // Disconnect the card
             card.disconnect(false);
@@ -247,6 +299,48 @@ public class TerminalApp {
         cipher.init(Cipher.DECRYPT_MODE, privateKey);
         byte[] decryptedBytes = cipher.doFinal(data);
         return new String(decryptedBytes);
+    }
+
+    private static void sendServerPublicKey(CardChannel channel, byte[] modulus, byte[] exponent) throws Exception {
+        // Create APDU to send the modulus and exponent
+        System.out.println("Modulus length: " + modulus.length);
+        System.out.println("Exponent length: " + exponent.length);
+        ByteBuffer bb = ByteBuffer.allocate(modulus.length + exponent.length + 4);
+        bb.put((byte) modulus.length);
+        bb.put(modulus);
+        bb.put((byte) exponent.length);
+        bb.put(exponent);
+        byte[] keyData = bb.array();
+        CommandAPDU sendPublicKeyAPDU = new CommandAPDU(0x00, RECEIVE_SERVER_PUBLIC_KEY_INSTRUCTION, 0x00, 0x00, keyData);
+        ResponseAPDU response = channel.transmit(sendPublicKeyAPDU);
+        System.out.println("Sent Public Key, Response: " + byteArrayToHex(response.getBytes()));
+
+    }
+
+
+    private static byte[] decryptCardData(PrivateKey privateKey, byte[] encryptedData) throws Exception {
+        Cipher cipher = Cipher.getInstance("RSA");
+        cipher.init(Cipher.DECRYPT_MODE, privateKey);
+        return cipher.doFinal(encryptedData);
+    }
+
+
+
+    private static PublicKey retrieveServerPublicKey(CardChannel channel) throws CardException, NoSuchPaddingException, NoSuchAlgorithmException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException, InvalidKeySpecException {
+        CommandAPDU command = new CommandAPDU(0x00, // CLA
+                GET_SERVER_PUBLIC_KEY_INSTRUCTION, // INS
+                0x00, // P1
+                0x00, // P2
+                256); // NE / LE (max response length)
+        ResponseAPDU response = channel.transmit(command);
+
+        if (response.getSW() != 0x9000) {
+            System.out.println("retrieveServerPublicKey Could not get public key. SW: " + Integer.toHexString(response.getSW()));
+            return null;
+        }
+
+        byte[] data = response.getData();
+        return getRsaPublicKeyFromData(data);
     }
 
     // Utility method to convert byte array to hexadecimal string
