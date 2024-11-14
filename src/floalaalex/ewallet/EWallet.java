@@ -6,10 +6,13 @@ import javacardx.crypto.Cipher;
 
 public class EWallet extends Applet {
 
-    private static final byte[] PIN = {'1', '2', '3', '4'};
-    private static final byte PIN_LENGTH = 4; // Assuming PIN length is 4 digits
-    private byte[] pinBuffer = new byte[PIN_LENGTH]; // Buffer to hold PIN sent from terminal
+    private static final byte[] DEFAULT_PIN = {'1', '2', '3', '4'};
+    private static final byte PIN_LENGTH = 4;
+    private static final byte MAX_PIN_TRIES = 3;
+
+    private OwnerPIN pin;
     private boolean cardUnlocked = false;
+
     private static final short CIPHER_LENGTH = 64; //64 since we use RSA-512
     private static final short SIGNATURE_LENGTH = 64; //64 since we use RSA-512
 
@@ -23,12 +26,24 @@ public class EWallet extends Applet {
     // The verification server's public key
     private RSAPublicKey serverRsaPublicKey;
 
+    private static final byte INS_VERIFY_PIN = 0x20;
+    private static final byte INS_UPDATE_PIN = 0x21;
+    private static final byte INS_SEND_CARD_PUBLIC_KEY = 0x22;
+    private static final byte INS_SEND_CARD_PRIVATE_KEY = 0x24;
+    private static final byte INS_RECEIVE_SERVER_PUBLIC_KEY = 0x30;
+    private static final byte INS_ENCRYPT_AND_SIGN_DATA = 0x32;
+    private static final byte INS_SEND_SERVER_PUBLIC_KEY = 0x40;
+
     protected EWallet() {
+        pin = new OwnerPIN(MAX_PIN_TRIES, PIN_LENGTH);
+        pin.update(DEFAULT_PIN, (short) 0, PIN_LENGTH);
+
         cardRsaKeyPair = new KeyPair(KeyPair.ALG_RSA_CRT, KeyBuilder.LENGTH_RSA_512);
         cardRsaKeyPair.genKeyPair();
         cardRsaPublicKey = (RSAPublicKey) cardRsaKeyPair.getPublic();
         cardRsaPrivateKey = (RSAPrivateCrtKey) cardRsaKeyPair.getPrivate();
-        cipher = Cipher.getInstance(Cipher.ALG_RSA_PKCS1, false); // Use PKCS1 padding
+
+        cipher = Cipher.getInstance(Cipher.ALG_RSA_PKCS1, false);
     }
 
     public static void install(byte[] bArray, short bOffset, byte bLength) {
@@ -43,24 +58,27 @@ public class EWallet extends Applet {
 
         byte[] buffer = apdu.getBuffer();
         switch (buffer[ISO7816.OFFSET_INS]) {
-            case 0x20:  // Command to verify PIN
+            case INS_VERIFY_PIN:
                 verifyPin(apdu);
                 break;
-            case 0x22:
+            case INS_UPDATE_PIN:
+                updatePin(apdu);
+                break;
+            case INS_SEND_CARD_PUBLIC_KEY:
                 sendCardPublicKey(apdu);
                 break;
-            case 0x24:
+            case INS_SEND_CARD_PRIVATE_KEY:
                 requiresUnlockedCard();
                 sendCardPrivateKey(apdu);
                 break;
-            case 0x30:
+            case INS_RECEIVE_SERVER_PUBLIC_KEY:
                 receiveServerPublicKey(apdu);
                 break;
-            case 0x32:
+            case INS_ENCRYPT_AND_SIGN_DATA:
                 requiresUnlockedCard();
                 encryptAndSignData(apdu);
                 break;
-            case 0x40:
+            case INS_SEND_SERVER_PUBLIC_KEY:
                 sendServerPublicKey(apdu);
                 break;
             default:
@@ -73,26 +91,25 @@ public class EWallet extends Applet {
         apdu.setIncomingAndReceive();
         byte[] buffer = apdu.getBuffer();
 
-        // Ensure that the pin is exactly 4 bytes long
+        if (!pin.check(buffer, ISO7816.OFFSET_CDATA, PIN_LENGTH)) {
+            ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED);
+        }
+
+        cardUnlocked = true;
+    }
+
+    private void updatePin(APDU apdu) {
+        requiresUnlockedCard();
+
+        apdu.setIncomingAndReceive();
+        byte[] buffer = apdu.getBuffer();
+
         short length = buffer[ISO7816.OFFSET_LC];
         if (length != PIN_LENGTH) {
             ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
         }
 
-        // Copy the payload of the APDU into the buffer
-        Util.arrayCopy(buffer, ISO7816.OFFSET_CDATA, pinBuffer, (short) 0, PIN_LENGTH);
-
-        // Check if the pinBuffer (value received from the APDU) is equal to the PIN that is hardcoded on initialization
-        if (Util.arrayCompare(pinBuffer, (short) 0, PIN, (short) 0, PIN_LENGTH) != 0) {
-            ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED); // Pin is incorrect, send corresponding error
-        }
-
-        // If PIN is correct unlock card and return success
-        unlockAndSendSuccessResponse(apdu);
-    }
-
-    private void unlockAndSendSuccessResponse(APDU apdu) {
-        cardUnlocked = true;
+        pin.update(buffer, ISO7816.OFFSET_CDATA, PIN_LENGTH);
     }
 
     private void requiresUnlockedCard() {

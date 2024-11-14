@@ -19,6 +19,7 @@ public class TerminalApp {
     // The APDU commands
     private static final byte SELECT_APPLET_INSTRUCTION = (byte) 0xA4;
     private static final byte VERIFY_PIN_INSTRUCTION = (byte) 0x20;
+    private static final byte CHANGE_PIN_INSTRUCTION = (byte) 0x21;
     private static final byte GET_CARD_PUBLIC_KEY_INSTRUCTION = (byte) 0x22;
     private static final byte GET_CARD_PRIVATE_KEY_INSTRUCTION = (byte) 0x24;
     private static final byte RECEIVE_SERVER_PUBLIC_KEY_INSTRUCTION = (byte) 0x30;
@@ -63,6 +64,8 @@ public class TerminalApp {
             // Select the Applet on the Card
             selectApplet(channel);
 
+            //test changing the pin
+            //testChangePin(channel);
 
             // Ask the user for the pin
             System.out.println("Please enter the card pin!");
@@ -105,6 +108,31 @@ public class TerminalApp {
             card.disconnect(false);
         } catch (Exception e) {
             e.printStackTrace();
+        }
+    }
+
+    private static void testChangePin(CardChannel channel) throws CardException {
+        // Test PIN verification
+        System.out.println("Please enter the card PIN to verify:");
+        Scanner in = new Scanner(System.in);
+        String pinString = in.nextLine();
+        verifyPin(channel, pinString);
+
+        // Test changing the PIN
+        System.out.println("Enter new PIN:");
+        String newPin = in.nextLine();
+        System.out.println("Confirm new PIN:");
+        String confirmPin = in.nextLine();
+
+        if (!newPin.equals(confirmPin)) {
+            System.out.println("PINs do not match. PIN change aborted.");
+        } else {
+            boolean pinChanged = changePin(channel, pinString, newPin);
+            if (pinChanged) {
+                System.out.println("PIN changed successfully.");
+            } else {
+                System.out.println("PIN change failed.");
+            }
         }
     }
 
@@ -222,6 +250,29 @@ public class TerminalApp {
             System.exit(0);
         } else {
             System.out.println("PIN verification successful.");
+        }
+    }
+
+    private static boolean changePin(CardChannel channel, String oldPin, String newPin) throws CardException {
+        byte[] dataBytes = newPin.getBytes();
+
+        CommandAPDU changePinAPDU = new CommandAPDU(0x00, // CLA
+                CHANGE_PIN_INSTRUCTION, // INS (Change PIN instruction)
+                0x00, // P1 -> Placeholder
+                0x00, // P2 -> Placeholder
+                dataBytes, // Data for command
+                0x00, // offset in the data
+                dataBytes.length, // LC (length of data)
+                0x04); // NE resp. LE (max length of returning data)
+
+        ResponseAPDU response = channel.transmit(changePinAPDU);
+
+        // Check the response status word
+        if (response.getSW() == 0x9000) {
+            return true; // PIN change successful
+        } else {
+            System.out.println("Error changing PIN. SW: " + Integer.toHexString(response.getSW()));
+            return false; // PIN change failed
         }
     }
 
