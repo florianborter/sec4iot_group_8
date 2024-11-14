@@ -22,7 +22,8 @@ public class EWallet extends Applet {
     private final RSAPrivateCrtKey cardRsaPrivateKey;
 
     // Store 4 bytes for IPv4 address
-    private byte[] ipAddress = new byte[4];
+    private static final short IP_ADDRESS_LENGTH = 4;
+    private byte[] ipAddress = new byte[IP_ADDRESS_LENGTH];
 
     // The verification server's public key
     private RSAPublicKey serverRsaPublicKey;
@@ -267,11 +268,32 @@ public class EWallet extends Applet {
     private void setIpAddress(APDU apdu) {
         byte[] buffer = apdu.getBuffer();
         short dataLen = apdu.setIncomingAndReceive();
-        if (dataLen != 4) {
-            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH); // Expecting 4 bytes for IPv4
+
+        // Check if length is 68 bytes: 4 bytes for IP + 64 bytes for signature
+        if (dataLen != (IP_ADDRESS_LENGTH + SIGNATURE_LENGTH)) {
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
         }
-        Util.arrayCopy(buffer, ISO7816.OFFSET_CDATA, ipAddress, (short) 0, dataLen);
+
+        // Extract IP address (first 4 bytes) and signature (next 64 bytes)
+        byte[] receivedIpAddress = new byte[IP_ADDRESS_LENGTH];
+        Util.arrayCopy(buffer, ISO7816.OFFSET_CDATA, receivedIpAddress, (short) 0, IP_ADDRESS_LENGTH);
+        byte[] receivedSignature = new byte[SIGNATURE_LENGTH];
+        Util.arrayCopy(buffer, (short) (ISO7816.OFFSET_CDATA + IP_ADDRESS_LENGTH), receivedSignature, (short) 0, SIGNATURE_LENGTH);
+
+        // Initialize the signature verification with the server's public key
+        Signature signatureVerifier = Signature.getInstance(Signature.ALG_RSA_SHA_PKCS1, false);
+        signatureVerifier.init(serverRsaPublicKey, Signature.MODE_VERIFY);
+
+        // Verify the signature
+        boolean isVerified = signatureVerifier.verify(receivedIpAddress, (short) 0, IP_ADDRESS_LENGTH, receivedSignature, (short) 0, SIGNATURE_LENGTH);
+        if (!isVerified) {
+            ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED); // Signature verification failed
+        }
+
+        // If signature is valid, store the IP address
+        Util.arrayCopy(receivedIpAddress, (short) 0, ipAddress, (short) 0, IP_ADDRESS_LENGTH);
     }
+
 
     // Method to retrieve IP address
     private void getIpAddress(APDU apdu) {

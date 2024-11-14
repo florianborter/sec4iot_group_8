@@ -107,7 +107,7 @@ public class TerminalApp {
             testOnCardEncryptionChunking(channel, serverPrivateKey, cardPublicKey);
 
             // Test setting and receiving the IP-Address of the server
-            ipTest(channel);
+            ipTest(channel, serverPrivateKey);
 
             // Disconnect the card
             card.disconnect(false);
@@ -205,10 +205,10 @@ public class TerminalApp {
         }
     }
 
-    private static void ipTest(CardChannel channel) throws CardException {
+    private static void ipTest(CardChannel channel, PrivateKey serverPrivateKey) throws Exception {
         // Set an example IP address
         byte[] ipAddress = new byte[]{(byte) 192, (byte) 168, 1, 1};
-        sendIpAddress(channel, ipAddress);
+        sendIpAddress(channel, ipAddress, serverPrivateKey);
 
         // Retrieve the IP address and print it
         byte[] retrievedIpAddress = retrieveIpAddress(channel);
@@ -375,20 +375,41 @@ public class TerminalApp {
         return getRsaPublicKeyFromData(data);
     }
 
-    private static void sendIpAddress(CardChannel channel, byte[] ipAddress) throws CardException {
+    /**
+     * Sends an IP-address to the terminal. This IP will be signed with the servers private key. The card checks the signature
+     * @param channel channel
+     * @param ipAddress the IP-Address which should be set
+     * @param serverPrivateKey the Private key of the server, used for signing
+     * @throws Exception exception
+     */
+    private static void sendIpAddress(CardChannel channel, byte[] ipAddress, PrivateKey serverPrivateKey) throws Exception {
         if (ipAddress.length != 4) {
             throw new IllegalArgumentException("IP address must be 4 bytes for IPv4.");
         }
-        CommandAPDU setIpAddressAPDU = new CommandAPDU(0x00, SET_IP_ADDRESS_INSTRUCTION, 0x00, 0x00, ipAddress);
+
+        // Sign the IP address with the server's private key
+        Signature signature = Signature.getInstance("SHA1withRSA");
+        signature.initSign(serverPrivateKey);
+        signature.update(ipAddress);
+        byte[] ipSignature = signature.sign();
+
+        // Concatenate IP address and its signature for transmission
+        byte[] ipWithSignature = new byte[ipAddress.length + ipSignature.length];
+        System.arraycopy(ipAddress, 0, ipWithSignature, 0, ipAddress.length);
+        System.arraycopy(ipSignature, 0, ipWithSignature, ipAddress.length, ipSignature.length);
+
+        // Transmit the IP address and its signature
+        CommandAPDU setIpAddressAPDU = new CommandAPDU(0x00, SET_IP_ADDRESS_INSTRUCTION, 0x00, 0x00, ipWithSignature);
         ResponseAPDU response = channel.transmit(setIpAddressAPDU);
 
         // Check response status
         if (response.getSW() == 0x9000) {
-            System.out.println("IP address sent to card successfully.");
+            System.out.println("Signed IP address sent to card successfully.");
         } else {
-            System.out.println("Failed to send IP address. SW: " + Integer.toHexString(response.getSW()));
+            System.out.println("Failed to send signed IP address. SW: " + Integer.toHexString(response.getSW()));
         }
     }
+
 
     private static byte[] retrieveIpAddress(CardChannel channel) throws CardException {
         CommandAPDU getIpAddressAPDU = new CommandAPDU(0x00, GET_IP_ADDRESS_INSTRUCTION, 0x00, 0x00, 4);
