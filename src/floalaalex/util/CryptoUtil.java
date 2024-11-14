@@ -40,7 +40,13 @@ public class CryptoUtil {
         return sig.verify(signature);
     }
 
-
+    public static byte[] signData(byte[] data, PrivateKey privateKey) throws NoSuchAlgorithmException, InvalidKeyException, SignatureException {
+        // Sign the IP address with the server's private key
+        Signature signature = Signature.getInstance("SHA1withRSA");
+        signature.initSign(privateKey);
+        signature.update(data);
+        return signature.sign();
+    }
 
     public static PublicKey getRsaPublicKeyFromData(byte[] data) throws NoSuchAlgorithmException, InvalidKeySpecException {
 

@@ -33,6 +33,7 @@ public class EWallet extends Applet {
     private static final byte INS_SEND_CARD_PRIVATE_KEY = 0x24;
     private static final byte INS_RECEIVE_SERVER_PUBLIC_KEY = 0x30;
     private static final byte INS_ENCRYPT_AND_SIGN_DATA = 0x32;
+    private static final byte INS_VALIDATE_TIMESTAMP = 0x34;
     private static final byte INS_SEND_SERVER_PUBLIC_KEY = 0x40;
     private static final byte SET_IP_ADDRESS = (byte) 0x50;
     private static final byte GET_IP_ADDRESS = (byte) 0x52;
@@ -85,6 +86,10 @@ public class EWallet extends Applet {
             case INS_ENCRYPT_AND_SIGN_DATA:
                 requiresUnlockedCard();
                 encryptAndSignData(apdu);
+                break;
+            case INS_VALIDATE_TIMESTAMP:
+                requiresUnlockedCard();
+                validateTimestamp(apdu);
                 break;
             case INS_SEND_SERVER_PUBLIC_KEY:
                 requiresUnlockedCard();
@@ -306,4 +311,30 @@ public class EWallet extends Applet {
         apdu.sendBytesLong(ipAddress, (short) 0, (short) ipAddress.length);
     }
 
+    private void validateTimestamp(APDU apdu) {
+        byte[] buffer = apdu.getBuffer();
+        short dataLen = apdu.setIncomingAndReceive();
+
+        short timeStampLength = 8; // A unix timestamp uses 8 bytes
+        if (dataLen != (short) (timeStampLength + SIGNATURE_LENGTH)) {
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH);
+        }
+
+        // Extract timestamp (first 8 bytes) and signature (next 64 bytes)
+        byte[] receivedTimestamp = new byte[timeStampLength];
+        Util.arrayCopy(buffer, ISO7816.OFFSET_CDATA, receivedTimestamp, (short) 0, timeStampLength);
+        byte[] receivedSignature = new byte[SIGNATURE_LENGTH];
+        Util.arrayCopy(buffer, (short) (ISO7816.OFFSET_CDATA + timeStampLength), receivedSignature, (short) 0, SIGNATURE_LENGTH);
+
+        // Initialize the signature verification with the server's public key
+        Signature signatureVerifier = Signature.getInstance(Signature.ALG_RSA_SHA_PKCS1, false);
+        signatureVerifier.init(serverRsaPublicKey, Signature.MODE_VERIFY);
+
+        // Verify the signature
+        boolean isVerified = signatureVerifier.verify(receivedTimestamp, (short) 0, timeStampLength, receivedSignature, (short) 0, SIGNATURE_LENGTH);
+        if (!isVerified) {
+            ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED); // Signature verification failed
+        }
+
+    }
 }

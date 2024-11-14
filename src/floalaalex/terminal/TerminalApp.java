@@ -24,6 +24,7 @@ public class TerminalApp {
     private static final byte GET_CARD_PRIVATE_KEY_INSTRUCTION = (byte) 0x24;
     private static final byte RECEIVE_SERVER_PUBLIC_KEY_INSTRUCTION = (byte) 0x30;
     private static final byte CARD_ENCRYPT_AND_SIGN_DATA_INSTRUCTION = (byte) 0x32;
+    private static final byte VALIDATE_TIMESTAMP_INSTRUCTION = (byte) 0x34;
     private static final byte GET_SERVER_PUBLIC_KEY_INSTRUCTION = (byte) 0x40;// Constants for new instructions
     private static final byte SET_IP_ADDRESS_INSTRUCTION = (byte) 0x50;
     private static final byte GET_IP_ADDRESS_INSTRUCTION = (byte) 0x52;
@@ -109,6 +110,10 @@ public class TerminalApp {
             // Test setting and receiving the IP-Address of the server
             System.out.println("\n\n\n\nTest setting and getting the IP of the server:");
             ipTest(channel, serverPrivateKey);
+
+            // Test the validation of the timestamp (check that timestamp is sent by server)
+            System.out.println("\n\n\n\nTest the validation of the timestamp:");
+            testTimestamp(channel, serverPrivateKey);
 
             // Disconnect the card
             card.disconnect(false);
@@ -214,10 +219,7 @@ public class TerminalApp {
         // Retrieve the IP address and print it
         byte[] retrievedIpAddress = retrieveIpAddress(channel);
         if (retrievedIpAddress != null) {
-            System.out.println("Retrieved IP address: " + (retrievedIpAddress[0] & 0xFF) + "." +
-                    (retrievedIpAddress[1] & 0xFF) + "." +
-                    (retrievedIpAddress[2] & 0xFF) + "." +
-                    (retrievedIpAddress[3] & 0xFF));
+            System.out.println("Retrieved IP address: " + (retrievedIpAddress[0] & 0xFF) + "." + (retrievedIpAddress[1] & 0xFF) + "." + (retrievedIpAddress[2] & 0xFF) + "." + (retrievedIpAddress[3] & 0xFF));
         }
     }
 
@@ -377,9 +379,10 @@ public class TerminalApp {
     }
 
     /**
-     * Sends an IP-address to the terminal. This IP will be signed with the servers private key. The card checks the signature
-     * @param channel channel
-     * @param ipAddress the IP-Address which should be set
+     * Sends an IP-address to the card. This IP will be signed with the servers private key. The card checks the signature
+     *
+     * @param channel          channel
+     * @param ipAddress        the IP-Address which should be set
      * @param serverPrivateKey the Private key of the server, used for signing
      * @throws Exception exception
      */
@@ -388,11 +391,7 @@ public class TerminalApp {
             throw new IllegalArgumentException("IP address must be 4 bytes for IPv4.");
         }
 
-        // Sign the IP address with the server's private key
-        Signature signature = Signature.getInstance("SHA1withRSA");
-        signature.initSign(serverPrivateKey);
-        signature.update(ipAddress);
-        byte[] ipSignature = signature.sign();
+        byte[] ipSignature = signData(ipAddress, serverPrivateKey);
 
         // Concatenate IP address and its signature for transmission
         byte[] ipWithSignature = new byte[ipAddress.length + ipSignature.length];
@@ -411,7 +410,6 @@ public class TerminalApp {
         }
     }
 
-
     private static byte[] retrieveIpAddress(CardChannel channel) throws CardException {
         CommandAPDU getIpAddressAPDU = new CommandAPDU(0x00, GET_IP_ADDRESS_INSTRUCTION, 0x00, 0x00, 4);
         ResponseAPDU response = channel.transmit(getIpAddressAPDU);
@@ -422,6 +420,52 @@ public class TerminalApp {
         } else {
             System.out.println("Failed to retrieve IP address. SW: " + Integer.toHexString(response.getSW()));
             return null;
+        }
+    }
+
+    private static byte[] getCurrentTimestamp() {
+        // Get the current time in milliseconds
+        long currentTimeMillis = System.currentTimeMillis();
+
+        // Convert milliseconds to seconds (Unix timestamp)
+        long timestampInSeconds = currentTimeMillis / 1000;
+
+        // Convert long (64-bit) timestamp to byte array (8 bytes)
+        ByteBuffer buffer = ByteBuffer.allocate(Long.BYTES);
+        buffer.putLong(timestampInSeconds);
+
+        return buffer.array();
+    }
+
+    /**
+     * Sends a timestamp to the terminal. This timestamp will be signed with the servers private key. The card checks the signature
+     *
+     * @param channel    channel
+     * @param privateKey the Private key of the server, used for signing
+     * @throws Exception exception
+     */
+    private static void testTimestamp(CardChannel channel, PrivateKey privateKey) throws Exception {
+        byte[] timestamp = getCurrentTimestamp();
+        if (timestamp.length != 8) {
+            throw new IllegalArgumentException("IP address must be 4 bytes for IPv4.");
+        }
+
+        byte[] signature = signData(timestamp, privateKey);
+
+        // Concatenate the timestamp and its signature for transmission
+        byte[] timestampWithSignature = new byte[timestamp.length + signature.length];
+        System.arraycopy(timestamp, 0, timestampWithSignature, 0, timestamp.length);
+        System.arraycopy(signature, 0, timestampWithSignature, timestamp.length, signature.length);
+
+        // Transmit the IP address and its signature
+        CommandAPDU setIpAddressAPDU = new CommandAPDU(0x00, VALIDATE_TIMESTAMP_INSTRUCTION, 0x00, 0x00, timestampWithSignature);
+        ResponseAPDU response = channel.transmit(setIpAddressAPDU);
+
+        // Check response status
+        if (response.getSW() == 0x9000) {
+            System.out.println("Signed timestamp sent to card and validated successfully.");
+        } else {
+            System.out.println("Failed to send or validate signed timestamp. SW: " + Integer.toHexString(response.getSW()));
         }
     }
 
