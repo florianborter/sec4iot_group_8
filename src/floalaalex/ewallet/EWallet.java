@@ -10,18 +10,16 @@ public class EWallet extends Applet {
     private static final byte PIN_LENGTH = 4;
     private static final byte MAX_PIN_TRIES = 3;
 
-    private OwnerPIN pin;
+    private final OwnerPIN pin;
     private boolean cardUnlocked = false;
 
     private static final short CIPHER_LENGTH = 64; //64 since we use RSA-512
     private static final short SIGNATURE_LENGTH = 64; //64 since we use RSA-512
 
-    private Cipher cipher;
+    private final Cipher cipher;
 
-    // Variables to store the card's KeyPair
-    private KeyPair cardRsaKeyPair;
-    private RSAPublicKey cardRsaPublicKey;
-    private RSAPrivateCrtKey cardRsaPrivateKey;
+    private final RSAPublicKey cardRsaPublicKey;
+    private final RSAPrivateCrtKey cardRsaPrivateKey;
 
     // The verification server's public key
     private RSAPublicKey serverRsaPublicKey;
@@ -38,7 +36,8 @@ public class EWallet extends Applet {
         pin = new OwnerPIN(MAX_PIN_TRIES, PIN_LENGTH);
         pin.update(DEFAULT_PIN, (short) 0, PIN_LENGTH);
 
-        cardRsaKeyPair = new KeyPair(KeyPair.ALG_RSA_CRT, KeyBuilder.LENGTH_RSA_512);
+        // Variables to store the card's KeyPair
+        KeyPair cardRsaKeyPair = new KeyPair(KeyPair.ALG_RSA_CRT, KeyBuilder.LENGTH_RSA_512);
         cardRsaKeyPair.genKeyPair();
         cardRsaPublicKey = (RSAPublicKey) cardRsaKeyPair.getPublic();
         cardRsaPrivateKey = (RSAPrivateCrtKey) cardRsaKeyPair.getPrivate();
