@@ -31,6 +31,7 @@ public class TerminalApp {
     private static final byte GET_SERVER_PUBLIC_KEY_INSTRUCTION = (byte) 0x40;
 
     private static final short statusWordLength = 2; // Two Bytes
+    private static final short RSA_512_NUM_BYTES = 64; //64 since we use RSA-512
 
     public static void main(String[] args) {
 
@@ -85,12 +86,8 @@ public class TerminalApp {
             String plainText = "Hello, Smart Card!";
             System.out.println("Plaintext to be encrypted: " + plainText);
 
-            // Encrypt with the public key
-            byte[] encryptedData = encryptData(plainText, cardPublicKey);  // cardPublicKey retrieved from the card
-            System.out.println("Encrypted Data (Base64): " + Base64.getEncoder().encodeToString(encryptedData));
-
             // Decrypt with the private key
-            String decryptedData = decryptData(encryptedData, cardPrivateKey);  // cardPrivateKey retrieved from the card
+            String decryptedData = decryptData(encryptData(plainText, cardPublicKey), cardPrivateKey);  // cardPrivateKey retrieved from the card
             System.out.println("Decrypted Data: " + decryptedData);
 
 
@@ -136,10 +133,19 @@ public class TerminalApp {
             ResponseAPDU encryptedResponse = channel.transmit(encryptDataAPDU);
             System.out.println("SW from encrypt() on card: " + encryptedResponse.getSW());
             byte[] encryptedCardData = encryptedResponse.getData();
-            System.out.println("Encrypted Card Data: " + byteArrayToHex(encryptedData));
+            System.out.println("Encrypted Card Data: " + byteArrayToHex(encryptedCardData));
+            // Extract the encrypted data and signature
+            byte[] encryptedData = new byte[RSA_512_NUM_BYTES];
+            byte[] signature = new byte[RSA_512_NUM_BYTES];
+            System.arraycopy(encryptedCardData, 0, encryptedData, 0, 64);
+            System.arraycopy(encryptedCardData, 64, signature, 0, 64);
             // Decrypt the received encrypted data
-            byte[] decryptedCardData = decryptCardData(serverPrivateKey, encryptedCardData);
+            byte[] decryptedCardData = decryptCardData(serverPrivateKey, encryptedData);
             System.out.println("Decrypted Card Data: " + new String(decryptedCardData));
+
+            // Verify the signature
+            boolean isSignatureValid = verifySignature(cardPublicKey, encryptedData, signature);
+            System.out.println("Signature valid: " + isSignatureValid);
 
             // Disconnect the card
             card.disconnect(false);
@@ -301,6 +307,13 @@ public class TerminalApp {
         return new String(decryptedBytes);
     }
 
+    private static boolean verifySignature(PublicKey publicKey, byte[] data, byte[] signature) throws Exception {
+        Signature sig = Signature.getInstance("SHA1withRSA");
+        sig.initVerify(publicKey);
+        sig.update(data);
+        return sig.verify(signature);
+    }
+
     private static void sendServerPublicKey(CardChannel channel, byte[] modulus, byte[] exponent) throws Exception {
         // Create APDU to send the modulus and exponent
         System.out.println("Modulus length: " + modulus.length);
@@ -323,7 +336,6 @@ public class TerminalApp {
         cipher.init(Cipher.DECRYPT_MODE, privateKey);
         return cipher.doFinal(encryptedData);
     }
-
 
 
     private static PublicKey retrieveServerPublicKey(CardChannel channel) throws CardException, NoSuchPaddingException, NoSuchAlgorithmException, InvalidKeyException, IllegalBlockSizeException, BadPaddingException, InvalidKeySpecException {

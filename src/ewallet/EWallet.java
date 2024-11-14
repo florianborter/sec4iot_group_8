@@ -1,10 +1,7 @@
 package ewallet;
 
 import javacard.framework.*;
-import javacard.security.KeyBuilder;
-import javacard.security.KeyPair;
-import javacard.security.RSAPrivateCrtKey;
-import javacard.security.RSAPublicKey;
+import javacard.security.*;
 import javacardx.crypto.Cipher;
 
 public class EWallet extends Applet {
@@ -13,7 +10,7 @@ public class EWallet extends Applet {
     private static final byte PIN_LENGTH = 4; // Assuming PIN length is 4 digits
     private byte[] pinBuffer = new byte[PIN_LENGTH]; // Buffer to hold PIN sent from terminal
     private boolean cardUnlocked = false;
-    private static final short MODULUS_LENGTH = 64; //64 since we use RSA-512
+    private static final short RSA_512_NUM_BYTES = 64; //64 since we use RSA-512
 
     private Cipher cipher;
 
@@ -60,7 +57,7 @@ public class EWallet extends Applet {
                 break;
             case 0x32:
                 requiresUnlockedCard();
-                encryptData(apdu);
+                encryptAndSignData(apdu);
                 break;
             case 0x40:
                 sendServerPublicKey(apdu);
@@ -204,20 +201,34 @@ public class EWallet extends Applet {
         serverRsaPublicKey.setExponent(buffer, (short) (expOffset + 1), expLength);
     }
 
-    private void encryptData(APDU apdu) {
-        apdu.setIncomingAndReceive();
+    private void encryptAndSignData(APDU apdu) {
         byte[] buffer = apdu.getBuffer();
-        short dataLength = buffer[ISO7816.OFFSET_LC]; // Correctly gets the size of the data
+        short dataLength = apdu.setIncomingAndReceive();
+        short dataOffset = ISO7816.OFFSET_CDATA;
 
         // Initialize the cipher for encryption with the server's public key
         cipher.init(serverRsaPublicKey, Cipher.MODE_ENCRYPT);
 
         // Encrypt the incoming data
-        byte[] encryptedData = new byte[MODULUS_LENGTH]; // Every cipher-text is as big as the modulus
-        short encLength = cipher.doFinal(buffer, ISO7816.OFFSET_CDATA, dataLength, encryptedData, (short) 0);
+        byte[] encryptedData = new byte[RSA_512_NUM_BYTES];
+        short encLength = cipher.doFinal(buffer, dataOffset, dataLength, encryptedData, (short) 0);
 
-        // Set the response with the encrypted data
-        Util.arrayCopy(encryptedData, (short) 0, buffer, (short) 0, encLength);
-        apdu.setOutgoingAndSend((short) 0, encLength);
+        // Initialize the signature object for signing with the card's private key
+        Signature signature = Signature.getInstance(Signature.ALG_RSA_SHA_PKCS1, false);
+        signature.init(cardRsaPrivateKey, Signature.MODE_SIGN);
+
+        // Sign the encrypted data
+        byte[] signatureData = new byte[RSA_512_NUM_BYTES];
+        short sigLength = signature.sign(encryptedData, (short) 0, encLength, signatureData, (short) 0);
+
+        // Combine the encrypted data and the signature
+        byte[] combinedData = new byte[(short) (encLength + sigLength)];
+        Util.arrayCopy(encryptedData, (short) 0, combinedData, (short) 0, encLength);
+        Util.arrayCopy(signatureData, (short) 0, combinedData, encLength, sigLength);
+
+        // Set the response with the combined encrypted and signed data
+        Util.arrayCopy(combinedData, (short) 0, buffer, (short) 0, (short) combinedData.length);
+        apdu.setOutgoingAndSend((short) 0, (short) combinedData.length);
     }
+
 }
