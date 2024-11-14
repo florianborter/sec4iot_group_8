@@ -11,7 +11,6 @@ public class EWallet extends Applet {
     private static final byte MAX_PIN_TRIES = 3;
 
     private final OwnerPIN pin;
-    private boolean cardUnlocked = false;
 
     private static final short CIPHER_LENGTH = 64; //64 since we use RSA-512
     private static final short SIGNATURE_LENGTH = 64; //64 since we use RSA-512
@@ -72,6 +71,7 @@ public class EWallet extends Applet {
                 updatePin(apdu);
                 break;
             case INS_SEND_CARD_PUBLIC_KEY:
+                requiresUnlockedCard();
                 sendCardPublicKey(apdu);
                 break;
             case INS_SEND_CARD_PRIVATE_KEY:
@@ -87,6 +87,7 @@ public class EWallet extends Applet {
                 encryptAndSignData(apdu);
                 break;
             case INS_SEND_SERVER_PUBLIC_KEY:
+                requiresUnlockedCard();
                 sendServerPublicKey(apdu);
                 break;
             case SET_IP_ADDRESS:
@@ -94,6 +95,7 @@ public class EWallet extends Applet {
                 setIpAddress(apdu);
                 break;
             case GET_IP_ADDRESS:
+                requiresUnlockedCard();
                 getIpAddress(apdu);
                 break;
             default:
@@ -110,7 +112,6 @@ public class EWallet extends Applet {
             ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED);
         }
 
-        cardUnlocked = true;
     }
 
     private void updatePin(APDU apdu) {
@@ -128,7 +129,7 @@ public class EWallet extends Applet {
     }
 
     private void requiresUnlockedCard() {
-        if (!cardUnlocked) {
+        if (!pin.isValidated()) {
             ISOException.throwIt(ISO7816.SW_SECURITY_STATUS_NOT_SATISFIED);
         }
     }

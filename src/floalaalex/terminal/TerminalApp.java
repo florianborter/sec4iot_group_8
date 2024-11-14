@@ -107,6 +107,7 @@ public class TerminalApp {
             testOnCardEncryptionChunking(channel, serverPrivateKey, cardPublicKey);
 
             // Test setting and receiving the IP-Address of the server
+            System.out.println("\n\n\n\nTest setting and getting the IP of the server:");
             ipTest(channel, serverPrivateKey);
 
             // Disconnect the card
@@ -132,7 +133,7 @@ public class TerminalApp {
         if (!newPin.equals(confirmPin)) {
             System.out.println("PINs do not match. PIN change aborted.");
         } else {
-            boolean pinChanged = changePin(channel, pinString, newPin);
+            boolean pinChanged = changePin(channel, newPin);
             if (pinChanged) {
                 System.out.println("PIN changed successfully.");
             } else {
@@ -273,7 +274,7 @@ public class TerminalApp {
         }
     }
 
-    private static boolean changePin(CardChannel channel, String oldPin, String newPin) throws CardException {
+    private static boolean changePin(CardChannel channel, String newPin) throws CardException {
         byte[] dataBytes = newPin.getBytes();
 
         CommandAPDU changePinAPDU = new CommandAPDU(0x00, // CLA
