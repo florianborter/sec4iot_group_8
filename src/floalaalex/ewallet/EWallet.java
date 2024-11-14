@@ -21,6 +21,9 @@ public class EWallet extends Applet {
     private final RSAPublicKey cardRsaPublicKey;
     private final RSAPrivateCrtKey cardRsaPrivateKey;
 
+    // Store 4 bytes for IPv4 address
+    private byte[] ipAddress = new byte[4];
+
     // The verification server's public key
     private RSAPublicKey serverRsaPublicKey;
 
@@ -31,6 +34,9 @@ public class EWallet extends Applet {
     private static final byte INS_RECEIVE_SERVER_PUBLIC_KEY = 0x30;
     private static final byte INS_ENCRYPT_AND_SIGN_DATA = 0x32;
     private static final byte INS_SEND_SERVER_PUBLIC_KEY = 0x40;
+    private static final byte SET_IP_ADDRESS_INSTRUCTION = (byte) 0x50;
+    private static final byte GET_IP_ADDRESS_INSTRUCTION = (byte) 0x52;
+
 
     protected EWallet() {
         pin = new OwnerPIN(MAX_PIN_TRIES, PIN_LENGTH);
@@ -79,6 +85,12 @@ public class EWallet extends Applet {
                 break;
             case INS_SEND_SERVER_PUBLIC_KEY:
                 sendServerPublicKey(apdu);
+                break;
+            case SET_IP_ADDRESS_INSTRUCTION:
+                setIpAddress(apdu);
+                break;
+            case GET_IP_ADDRESS_INSTRUCTION:
+                getIpAddress(apdu);
                 break;
             default:
                 // good practice: If you don't know the INStruction, say so:
@@ -250,6 +262,22 @@ public class EWallet extends Applet {
         // Set the response with the combined encrypted and signed data
         Util.arrayCopy(combinedData, (short) 0, buffer, (short) 0, (short) combinedData.length);
         apdu.setOutgoingAndSend((short) 0, (short) combinedData.length);
+    }
+
+    private void setIpAddress(APDU apdu) {
+        byte[] buffer = apdu.getBuffer();
+        short dataLen = apdu.setIncomingAndReceive();
+        if (dataLen != 4) {
+            ISOException.throwIt(ISO7816.SW_WRONG_LENGTH); // Expecting 4 bytes for IPv4
+        }
+        Util.arrayCopy(buffer, ISO7816.OFFSET_CDATA, ipAddress, (short) 0, dataLen);
+    }
+
+    // Method to retrieve IP address
+    private void getIpAddress(APDU apdu) {
+        apdu.setOutgoing();
+        apdu.setOutgoingLength((short) ipAddress.length);
+        apdu.sendBytesLong(ipAddress, (short) 0, (short) ipAddress.length);
     }
 
 }

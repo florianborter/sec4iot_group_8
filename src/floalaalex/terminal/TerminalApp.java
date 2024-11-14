@@ -24,7 +24,9 @@ public class TerminalApp {
     private static final byte GET_CARD_PRIVATE_KEY_INSTRUCTION = (byte) 0x24;
     private static final byte RECEIVE_SERVER_PUBLIC_KEY_INSTRUCTION = (byte) 0x30;
     private static final byte CARD_ENCRYPT_AND_SIGN_DATA_INSTRUCTION = (byte) 0x32;
-    private static final byte GET_SERVER_PUBLIC_KEY_INSTRUCTION = (byte) 0x40;
+    private static final byte GET_SERVER_PUBLIC_KEY_INSTRUCTION = (byte) 0x40;// Constants for new instructions
+    private static final byte SET_IP_ADDRESS_INSTRUCTION = (byte) 0x50;
+    private static final byte GET_IP_ADDRESS_INSTRUCTION = (byte) 0x52;
 
     private static final short CIPHER_TEXT_LENGTH = 64; //64 since we use RSA-512
     private static final short SIGNATURE_LENGTH = 64; //64 since we use RSA-512
@@ -100,9 +102,12 @@ public class TerminalApp {
             // Encrypt some data
             testOnCardEncryption(channel, serverPrivateKey, cardPublicKey);
 
-
+            // Test the chunking
             System.out.println("\n\n\n\nTest encryption and decryption of a bigger text:");
             testOnCardEncryptionChunking(channel, serverPrivateKey, cardPublicKey);
+
+            // Test setting and receiving the IP-Address of the server
+            ipTest(channel);
 
             // Disconnect the card
             card.disconnect(false);
@@ -197,6 +202,21 @@ public class TerminalApp {
             // Verify combined signature (simplified example, adjust verification process as needed)
             boolean isSignatureValid = verifySignature(cardPublicKey, encryptedChunks.get(i), signatures.get(i));
             System.out.println("Signature valid? " + isSignatureValid);
+        }
+    }
+
+    private static void ipTest(CardChannel channel) throws CardException {
+        // Set an example IP address
+        byte[] ipAddress = new byte[]{(byte) 192, (byte) 168, 1, 1};
+        sendIpAddress(channel, ipAddress);
+
+        // Retrieve the IP address and print it
+        byte[] retrievedIpAddress = retrieveIpAddress(channel);
+        if (retrievedIpAddress != null) {
+            System.out.println("Retrieved IP address: " + (retrievedIpAddress[0] & 0xFF) + "." +
+                    (retrievedIpAddress[1] & 0xFF) + "." +
+                    (retrievedIpAddress[2] & 0xFF) + "." +
+                    (retrievedIpAddress[3] & 0xFF));
         }
     }
 
@@ -353,6 +373,34 @@ public class TerminalApp {
 
         byte[] data = response.getData();
         return getRsaPublicKeyFromData(data);
+    }
+
+    private static void sendIpAddress(CardChannel channel, byte[] ipAddress) throws CardException {
+        if (ipAddress.length != 4) {
+            throw new IllegalArgumentException("IP address must be 4 bytes for IPv4.");
+        }
+        CommandAPDU setIpAddressAPDU = new CommandAPDU(0x00, SET_IP_ADDRESS_INSTRUCTION, 0x00, 0x00, ipAddress);
+        ResponseAPDU response = channel.transmit(setIpAddressAPDU);
+
+        // Check response status
+        if (response.getSW() == 0x9000) {
+            System.out.println("IP address sent to card successfully.");
+        } else {
+            System.out.println("Failed to send IP address. SW: " + Integer.toHexString(response.getSW()));
+        }
+    }
+
+    private static byte[] retrieveIpAddress(CardChannel channel) throws CardException {
+        CommandAPDU getIpAddressAPDU = new CommandAPDU(0x00, GET_IP_ADDRESS_INSTRUCTION, 0x00, 0x00, 4);
+        ResponseAPDU response = channel.transmit(getIpAddressAPDU);
+
+        if (response.getSW() == 0x9000) {
+            System.out.println("IP address retrieved successfully.");
+            return response.getData();
+        } else {
+            System.out.println("Failed to retrieve IP address. SW: " + Integer.toHexString(response.getSW()));
+            return null;
+        }
     }
 
     // Utility method to convert byte array to hexadecimal string
