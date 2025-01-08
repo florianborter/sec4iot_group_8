@@ -1,6 +1,10 @@
 package floalaalex.terminal;
 
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 import javax.smartcardio.*;
 import java.nio.ByteBuffer;
 import java.security.*;
@@ -27,7 +31,12 @@ public class TerminalApp {
     private static final byte VALIDATE_TIMESTAMP_INSTRUCTION = (byte) 0x34;
     private static final byte GET_SERVER_PUBLIC_KEY_INSTRUCTION = (byte) 0x40;// Constants for new instructions
     private static final byte SET_IP_ADDRESS_INSTRUCTION = (byte) 0x50;
-    private static final byte GET_IP_ADDRESS_INSTRUCTION = (byte) 0x52;
+    static final byte GET_IP_ADDRESS_INSTRUCTION = (byte) 0x52;
+
+    // Vending machine instructions
+    public static final byte SEND_PRODUCT_DATA_TO_CARD = (byte) 0x60;
+    static final int MAX_APDU_DATA_SIZE = 65535;
+
 
     private static final short CIPHER_TEXT_LENGTH = 64; //64 since we use RSA-512
     private static final short SIGNATURE_LENGTH = 64; //64 since we use RSA-512
@@ -114,6 +123,28 @@ public class TerminalApp {
             // Test the validation of the timestamp (check that timestamp is sent by server)
             System.out.println("\n\n\n\nTest the validation of the timestamp:");
             testTimestamp(channel, serverPrivateKey);
+
+
+            /**
+            // Beginning of VendingMachineApp
+            VendingMachineApp vendingMachineApp = new VendingMachineApp(card);
+
+            // Sending the products to the card
+            int APDUnumber = vendingMachineApp.sendProducts(card);
+
+            // Checking for IP and signature
+            vendingMachineApp.askServerIPAndVerifySignature(cardPublicKey);
+
+            // Card recovering data from the cards
+            String productsJSON = rebuildDataFromAPDUs(channel,APDUnumber);
+
+            // Building the List<Product> of products
+            List<Product> productList = rebuildProducts(productsJSON);
+
+            // Choosing product
+            String productChoice = chooseProduct(productList,channel);
+             **/
+
 
             // Disconnect the card
             card.disconnect(false);
@@ -477,4 +508,97 @@ public class TerminalApp {
         }
         return hexString.toString();
     }
+
+
+    /// VedingMachineApp methods defined below ///
+
+
+    /**
+     * This method is used to recover product data sent by the VendingMachineApp to the card. It is used by the "rebuildDataFromAPDUs" defined below
+     * @param channel default channel used to communicate with the card
+     * @param segmentIndex the index of the APDU sent in case of multiple APDUs
+     * @return data from the card in a JSON String format
+     * @throws CardException
+     */
+    public static String recoverProductData(CardChannel channel, int segmentIndex) throws CardException {
+
+        CommandAPDU command = new CommandAPDU(0x00, 0xB0, 0x00, segmentIndex,MAX_APDU_DATA_SIZE);
+        ResponseAPDU response = channel.transmit(command);
+
+        if (response.getSW() == 0x9000) {
+            byte[] segmentData = response.getData();
+            // dataBuilder.append(new String(segmentData));
+            return new String(segmentData);
+        } else {
+            System.out.printf("Erreur : SW=0x%04X%n", response.getSW());
+            return null;
+        }
+    }
+
+    /**
+     * This method is used to recover the entire product data sent by the VendingMachineApp to the card.
+     * @param channel default channel used to communicate with the card
+     * @param APDUs_number is the number of APDU commands used to transmit the product data
+     * @return the full product list in a JSON String format
+     * @throws CardException
+     */
+    public static String rebuildDataFromAPDUs(CardChannel channel, int APDUs_number) throws CardException {
+
+        StringBuilder dataBuilder = new StringBuilder();
+
+        for (int i=0;i<APDUs_number;i++){
+            dataBuilder.append(recoverProductData(channel,i));
+        }
+
+        String completeProductData = dataBuilder.toString();
+        System.out.println("Données complètes récupérées sur la carte sous forme de JSON : " + completeProductData);
+        return completeProductData;
+    }
+
+
+    /**
+     * This method remakes the list of Products from the card data
+     * @param JSONdata the product list in a JSON String format
+     * @return a list of the Products
+     * @throws JsonProcessingException
+     */
+    public static List<Product> rebuildProducts(String JSONdata) throws JsonProcessingException {
+
+        ObjectMapper objectMapper = new ObjectMapper();
+        return objectMapper.readValue(JSONdata, new TypeReference<List<Product>>() {});
+    }
+
+
+    /**
+     * This method selects a product with the user's input and returns the choice to the vending Machine
+     * @param productList list of products
+     * @param channel default channel used to communicate with the card
+     * @return concatenated String of product ID and encrypted product data
+     * @throws CardException
+     */
+    public static String chooseProduct(List<Product> productList, CardChannel channel) throws CardException {
+
+        System.out.println("Please enter the ID of the chosen product (between 1 and 20)");
+
+        Scanner inputSCAN = new Scanner(System.in);
+        String productCode = inputSCAN.nextLine();
+
+        while ( !productCode.matches("\\d+") || !(1<=Integer.valueOf(productCode) && Integer.valueOf(productCode)<=20) ){
+            System.out.println("Please enter a valid ID of the chosen product (between 1 and 20)");
+            productCode = inputSCAN.nextLine();
+        }
+
+        int ID = Integer.valueOf(productCode);
+
+        // Converting chosen product info into bytes
+        byte[] dataToEncrypt = productList.get(ID).toString().getBytes();
+        // Encrypting data on the card
+        byte[] encryptedData = encryptDataOnCard(dataToEncrypt, channel);
+
+        String responseToVendingMachine = String.valueOf(ID);
+
+        // We return the productID with the encrypted data
+        return responseToVendingMachine + encryptedData.toString();
+    }
+
 }

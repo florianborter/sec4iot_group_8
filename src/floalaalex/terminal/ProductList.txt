@@ -1,0 +1,22 @@
+[
+  { "id": 1, "name": "Chocolate Bar", "price": 1.50 },
+  { "id": 2, "name": "Potato Chips", "price": 1.20 },
+  { "id": 3, "name": "Gummy Bears", "price": 1.00 },
+  { "id": 4, "name": "Granola Bar", "price": 1.80 },
+  { "id": 5, "name": "Salted Pretzels", "price": 1.30 },
+  { "id": 6, "name": "Peanuts", "price": 1.00 },
+  { "id": 7, "name": "Trail Mix", "price": 2.00 },
+  { "id": 8, "name": "Muffin", "price": 2.50 },
+  { "id": 9, "name": "Cookies", "price": 1.50 },
+  { "id": 10, "name": "Candy Bar", "price": 1.20 },
+  { "id": 11, "name": "Bottled Water", "price": 1.00 },
+  { "id": 12, "name": "Soda Can", "price": 1.50 },
+  { "id": 13, "name": "Iced Tea", "price": 1.80 },
+  { "id": 14, "name": "Energy Drink", "price": 2.00 },
+  { "id": 15, "name": "Coffee Can", "price": 1.50 },
+  { "id": 16, "name": "Fruit Juice", "price": 1.80 },
+  { "id": 17, "name": "Chewing Gum", "price": 0.80 },
+  { "id": 18, "name": "Mint Candy", "price": 0.90 },
+  { "id": 19, "name": "Popcorn", "price": 1.60 },
+  { "id": 20, "name": "Cup Noodles", "price": 2.50 }
+]
