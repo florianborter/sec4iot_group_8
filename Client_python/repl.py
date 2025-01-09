@@ -7,12 +7,10 @@ init()
 if "-v" in sys.argv:
     Logger.log_verbose = True
 
-# Initialiser la carte
 card = VendingMachineCard.init_card()
 
 print("\nInterface REPL de la carte activée. Tapez 'aide' pour une liste des commandes disponibles.\n")
 
-# Définir les commandes
 commands = {
     "connexion": {
         "func": card.login,
@@ -76,15 +74,12 @@ commands = {
     }
 }
 
-# Boucle REPL
 while True:
     try:
-        # Lire l'entrée utilisateur
         cmd_input = input("> ").strip()
         if not cmd_input:
             continue
 
-        # Séparer la commande et les arguments
         parts = cmd_input.split(maxsplit=1)
         cmd_name = parts[0]
         cmd_args = parts[1:] if len(parts) > 1 else []
@@ -105,34 +100,30 @@ while True:
             print(f"Commande inconnue : {cmd_name}")
             continue
 
-        # Récupérer les détails de la commande
         cmd_details = commands[cmd_name]
         func = cmd_details["func"]
         args = cmd_details["args"]
 
-        # Séparer les arguments si fournis
         if cmd_args:
             cmd_args = cmd_args[0].split(maxsplit=len(args) - 1)
 
-        # Valider le nombre d'arguments
         if len(cmd_args) != len(args):
             print(f"Usage : {cmd_name} {' '.join(f'<{arg}>' for arg in args)}")
             continue
 
-        # Gérer les commandes spécifiques
         if cmd_name == "signer":
-            cmd_args[0] = cmd_args[0].encode("utf-8")  # Convertir en bytes
+            cmd_args[0] = cmd_args[0].encode("utf-8")
             signature = func(*cmd_args)
             with open("signature.bin", "wb") as f:
-                f.write(signature)  # Sauvegarder la signature en bytes
+                f.write(signature)
             print("Signature sauvegardée dans 'signature.bin'. Utilisez ce fichier pour la vérification.")
 
         elif cmd_name == "verifier":
             try:
                 with open("signature.bin", "rb") as f:
-                    signature = f.read()  # Charger la signature en bytes
-                cmd_args[0] = cmd_args[0].encode("utf-8")  # Convertir en bytes
-                result = func(cmd_args[0], signature)  # Passer les données et la signature
+                    signature = f.read()
+                cmd_args[0] = cmd_args[0].encode("utf-8")
+                result = func(cmd_args[0], signature)
                 print(result)
             except FileNotFoundError:
                 print("Erreur : Le fichier de signature ('signature.bin') est manquant. Veuillez d'abord signer des données.")
@@ -141,12 +132,12 @@ while True:
 
         elif cmd_name == "changer_pin":
             func(*cmd_args)
-            card.save_pin()  
+            card.save_pin()
             print("= Note : vous devrez vous reconnecter après cela")
 
         elif cmd_name == "reinitialiser":
             result = func()
-            card.save_pin() 
+            card.save_pin()
             print(result)
             print("= Note : vous devrez vous reconnecter après cela")
 
@@ -155,7 +146,6 @@ while True:
             print(result)
 
         else:
-
             result = func(*cmd_args)
             print(result if result is not None else "Commande exécutée avec succès.")
     except Exception as e:
