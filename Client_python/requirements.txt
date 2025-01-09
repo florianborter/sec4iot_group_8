@@ -1,0 +1,4 @@
+colorama~=0.4.6
+rsa~=4.9
+pyscard~=2.0.5
+pycryptodome~=3.18.0
